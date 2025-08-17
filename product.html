@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Producto — eltelepesca</title>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/locale/es.js"></script>
@@ -24,7 +23,7 @@
 
   <main class="max-w-5xl mx-auto px-4 py-6">
     <template x-if="!product && !loadError"><p class="text-sm text-slate-500">Cargando…</p></template>
-    <template x-if="loadError"><p class="text-sm text-rose-600">⚠️ No pude leer <code>data/productos.xlsx</code>. Verificá la ruta.</p></template>
+    <template x-if="loadError"><p class="text-sm text-rose-600">⚠️ No pude leer <code>data/productos.json</code>. Verificá la ruta.</p></template>
     <template x-if="product">
       <div class="grid md:grid-cols-2 gap-6">
         <div class="bg-white rounded-2xl shadow-sm border overflow-hidden">
@@ -52,41 +51,20 @@
 <script>
 function detailApp(){
   const MP_RATE = 1.10;
-  function num(v){ if(typeof v==='number') return v; if(v==null) return NaN; let s=String(v).trim().replace(/[^0-9,.-]/g,''); if(s.includes(',')){ s=s.replace(/\./g,''); s=s.replace(/,/g,'.'); } const n=Number(s); return isFinite(n)?n:NaN; }
-  function pick(o,ks){ for(const k of ks){ if(o[k]!=null&&o[k]!=='') return o[k]; } }
-
   return {
     product:null, id:null, loadError:false,
     init(){ const p=new URLSearchParams(location.search); this.id=p.get('id'); this.load(); },
     async load(){
       try{
-        const res = await fetch('data/productos.xlsx', { cache:'no-store' }); // <- RELATIVO
+        const res = await fetch('data/productos.json', { cache:'no-store' });
         if(!res.ok){ this.loadError=true; return; }
-        const buf = await res.arrayBuffer(); const wb = XLSX.read(buf,{type:'array'});
-        for(const sheetName of wb.SheetNames){
-          const ws = wb.Sheets[sheetName];
-          const rows = XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});
-          let rowId=1;
-          for(const r of rows){
-            const row=Object.fromEntries(Object.entries(r).map(([k,v])=>[String(k).toLowerCase().trim(), v]));
-            const nombre = pick(row,['nombre','producto','articulo','descri','detalle','item']);
-            const precioRaw = pick(row,['precio','$','importe','valor','p. lista','precio feria','precio unitario']);
-            const desc = pick(row,['descripcion','detalle','observ']);
-            const stock = pick(row,['stock','disp']);
-            const imagen = pick(row,['imagen','foto','url']);
-            const codigo = pick(row,['codigo','sku','id']);
-            const categoria = pick(row,['categoria','rubro','familia']) || sheetName;
-            const base = num(precioRaw);
-            if(nombre && !isNaN(base)){
-              const rec = { __id: sheetName+'-'+(rowId++), nombre: String(nombre).trim(),
-                precio_transfer: Math.round(base), precio_mp: Math.round(base*MP_RATE),
-                descripcion: String(desc||'').trim(), stock: stock||'',
-                imagen: String(imagen||'').trim(), codigo: String(codigo||'').trim(),
-                categoria: String(categoria).trim() };
-              if (rec.__id === this.id){ this.product = rec; return; }
-            }
-          }
-        }
+        const data = await res.json();
+        const items = (data.items||[]).map(it => ({
+          ...it,
+          precio_transfer: Math.round(Number(it.precio_base)||0),
+          precio_mp: Math.round((Number(it.precio_base)||0)*MP_RATE),
+        }));
+        this.product = items.find(x => x.__id === this.id) || null;
       }catch(e){ this.loadError=true; }
     },
     fmtPrice(v){ return Number(v||0).toLocaleString('es-AR',{style:'currency', currency:'ARS', maximumFractionDigits:0}); },

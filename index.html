@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>eltelepesca — Tienda</title>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/locale/es.js"></script>
@@ -36,16 +35,12 @@
             <button class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100" :class="{'bg-sky-50 text-sky-700': activeCategory===cat}" @click="activeCategory=cat" x-text="cat"></button>
           </template>
         </div>
-        <template x-if="!categories.length"><p class="text-sm text-slate-500">Cargando catálogo…</p></template>
+        <template x-if="!categories.length && !loading"><p class="text-sm text-rose-600">⚠️ No hay categorías; revisá el JSON.</p></template>
         <hr class="my-4"><h2 class="font-semibold mb-2">Búsqueda</h2>
         <input type="search" class="w-full border rounded-2xl px-3 py-2" placeholder="Buscar producto..." x-model="query">
         <template x-if="loadError">
-          <p class="mt-3 text-xs text-rose-600">⚠️ No pude leer <code>data/productos.xlsx</code>. Verificá que exista esa ruta y nombre.</p>
+          <p class="mt-3 text-xs text-rose-600">⚠️ No pude leer <code>data/productos.json</code>. Verificá que exista.</p>
         </template>
-      </div>
-      <div class="mt-6 bg-amber-50 border-amber-200 text-amber-800 border rounded-2xl p-4">
-        <strong>Retiro en local</strong>
-        <p class="text-sm mt-1">No realizamos envíos. Coordiná el retiro por WhatsApp: <a href="https://wa.me/541165780247" target="_blank" class="underline">11 6578 0247</a>.</p>
       </div>
     </aside>
 
@@ -58,8 +53,7 @@
       <template x-if="!products.length && !loading">
         <div class="bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl p-4">
           <strong>No hay productos para mostrar.</strong>
-          <p class="text-sm mt-1">Revisá: <code>data/productos.xlsx</code> existe en el deploy y tiene precios en la columna <em>PRECIO</em> o alias compatibles.</p>
-          <p class="text-xs mt-1">Probá abrir directamente: <code>https://TU-SITIO.netlify.app/data/productos.xlsx</code></p>
+          <p class="text-sm mt-1">Revisá: <code>data/productos.json</code> y que tenga items.</p>
         </div>
       </template>
 
@@ -92,47 +86,28 @@
 <script>
 function storeApp(){
   const MP_RATE = 1.10;
-  function num(v){ if(typeof v==='number') return v; if(v==null) return NaN; let s=String(v).trim().replace(/[^0-9,.-]/g,''); if(s.includes(',')){ s=s.replace(/\./g,''); s=s.replace(/,/g,'.'); } const n=Number(s); return isFinite(n)?n:NaN; }
-  function pick(o,ks){ for(const k of ks){ if(o[k]!=null&&o[k]!=='') return o[k]; } }
-
   return {
     products:[], categories:[], activeCategory:null, query:'', drawer:false, updatedAt:'', loading:true, loadError:false,
     cart: JSON.parse(localStorage.getItem('cart')||'[]'),
-    init(){ this.autoLoad(); },
-    async autoLoad(){
+    init(){ this.loadJSON(); },
+    async loadJSON(){
       try{
-        const res = await fetch('data/productos.xlsx', { cache:'no-store' }); // <- RELATIVO
-        if(!res.ok){ this.loadError=true; this.loading=false; return; }
-        const buf = await res.arrayBuffer(); const wb = XLSX.read(buf,{type:'array'});
-        const all=[]; const cats=new Set(); let rowId=1;
-        for(const sheetName of wb.SheetNames){
-          const ws = wb.Sheets[sheetName];
-          const rows = XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});
-          for(const r of rows){
-            const row=Object.fromEntries(Object.entries(r).map(([k,v])=>[String(k).toLowerCase().trim(), v]));
-            const nombre = pick(row,['nombre','producto','articulo','descri','detalle','item']);
-            const precioRaw = pick(row,['precio','$','importe','valor','p. lista','precio feria','precio unitario']);
-            const desc = pick(row,['descripcion','detalle','observ']);
-            const stock = pick(row,['stock','disp']);
-            const imagen = pick(row,['imagen','foto','url']);
-            const codigo = pick(row,['codigo','sku','id']);
-            const categoria = pick(row,['categoria','rubro','familia']) || sheetName;
-            const base = num(precioRaw);
-            if(nombre && !isNaN(base)){
-              const precio_transfer = Math.round(base);
-              const precio_mp = Math.round(base * MP_RATE);
-              all.push({ __id: sheetName+'-'+(rowId++), nombre: String(nombre).trim(),
-                precio_transfer, precio_mp, descripcion: String(desc||'').trim(), stock: stock||'',
-                imagen: String(imagen||'').trim(), codigo: String(codigo||'').trim(), categoria: String(categoria).trim() });
-              cats.add(String(categoria).trim());
-            }
-          }
-        }
-        this.products=all; this.categories=[...cats]; this.updatedAt=dayjs().format('DD/MM/YYYY HH:mm');
+        const res = await fetch('data/productos.json', { cache:'no-store' });
+        if (!res.ok) { this.loadError=true; this.loading=false; return; }
+        const data = await res.json();
+        const items = (data.items||[]).map(it => ({
+          ...it,
+          precio_transfer: Math.round(Number(it.precio_base)||0),
+          precio_mp: Math.round((Number(it.precio_base)||0) * MP_RATE),
+        }));
+        this.products = items;
+        this.categories = [...new Set(items.map(i=>i.categoria||'General'))];
+        this.updatedAt = dayjs().format('DD/MM/YYYY HH:mm');
       }catch(e){ this.loadError=true; } finally { this.loading=false; }
     },
     fmtPrice(v){ return Number(v||0).toLocaleString('es-AR',{style:'currency', currency:'ARS', maximumFractionDigits:0}); },
     cartCount(){ return this.cart.reduce((a,b)=>a+(b.cant||0),0); },
+    filteredProducts(){ const q=this.query.trim().toLowerCase(); return this.products.filter(p=>{ const okCat=!this.activeCategory||(p.categoria===this.activeCategory); const okQ=!q||[p.nombre,p.descripcion,p.categoria,p.codigo].filter(Boolean).join(' ').toLowerCase().includes(q); return okCat&&okQ; }); },
     addToCart(item){ const idx=this.cart.findIndex(ci=>ci.__id===item.__id); if(idx>-1){ this.cart[idx].cant++; } else { this.cart.push({...item,cant:1}); } localStorage.setItem('cart', JSON.stringify(this.cart)); this.drawer=true; },
   }
 }
