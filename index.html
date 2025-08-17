@@ -1,1 +1,479 @@
-<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>eltelepesca — Tienda</title><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script><script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script><script src="https://cdn.jsdelivr.net/npm/dayjs@1/locale/es.js"></script><script>dayjs.locale('es');</script><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-slate-50 text-slate-800" x-data="storeApp()" x-init="init()"><header class="sticky top-0 z-30 backdrop-blur bg-white/80 border-b border-slate-200"><div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3"><div class="flex-1"><h1 class="text-xl font-bold tracking-tight">eltelepesca</h1><p class="text-xs text-slate-500">Catálogo automático del repo</p></div><label class="inline-flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-xl" x-show="isAdmin"><input type="file" class="hidden" accept=".xlsx,.xls,.csv" @change="handleFile($event)" />📄 Subir Excel (solo admin)</label><button @click="drawer=true" class="relative bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-xl font-semibold">🛒 Carrito<span class="absolute -top-2 -right-2 bg-emerald-500 text-white text-xs px-2 py-0.5 rounded-full" x-text="cartCount()"></span></button></div></header><main class="max-w-6xl mx-auto px-4 py-6 grid grid-cols-1 md:grid-cols-4 gap-6"><aside class="md:col-span-1"><div class="bg-white rounded-2xl shadow-sm border p-4 sticky top-20"><h2 class="font-semibold mb-2">Categorías</h2><div class="space-y-1" x-show="categories.length"><button class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100" :class="{'bg-sky-50 text-sky-700': activeCategory===null}" @click="activeCategory=null">Todas</button><template x-for="cat in categories" :key="cat"><button class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100" :class="{'bg-sky-50 text-sky-700': activeCategory===cat}" @click="activeCategory=cat" x-text="cat"></button></template></div><template x-if="!categories.length"><p class="text-sm text-slate-500">Cargando catálogo…</p></template><hr class="my-4"><h2 class="font-semibold mb-2">Búsqueda</h2><input type="search" class="w-full border rounded-xl px-3 py-2" placeholder="Buscar producto..." x-model="query"></div></aside><section class="md:col-span-3"><div class="flex items-center justify-between mb-3"><h2 class="text-lg font-semibold">Productos</h2><p class="text-sm text-slate-500" x-show="updatedAt">Lista cargada: <span x-text="updatedAt"></span></p></div><div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"><template x-for="item in filteredProducts()" :key="item.__id"><div class="bg-white rounded-2xl border shadow-sm overflow-hidden flex flex-col"><div class="h-36 bg-slate-100 relative"><img :src="item.imagen || 'https://picsum.photos/seed/'+item.__id+'/600/400'" alt="" class="w-full h-full object-cover"><span class="absolute left-2 top-2 text-xs bg-white/90 px-2 py-0.5 rounded-full border" x-text="item.categoria || 'General'"></span></div><div class="p-4 flex-1 flex flex-col"><h3 class="font-semibold line-clamp-2" x-text="item.nombre || 'Producto' "></h3><p class="text-sm text-slate-500 mt-1 line-clamp-2" x-text="item.descripcion || ''"></p><div class="mt-auto"><div class="flex items-center justify-between mt-3"><span class="text-lg font-bold" x-text="fmtPrice(item.precio)"></span><span class="text-xs text-slate-500" x-text="item.stock ? ('Stock: '+item.stock) : ''"></span></div><button class="w-full mt-3 bg-sky-600 hover:bg-sky-700 text-white px-3 py-2 rounded-xl font-semibold" @click="addToCart(item)">Agregar</button></div></div></div></template></div></section></main><div class="fixed inset-0 z-40" x-show="drawer" x-transition.opacity><div class="absolute inset-0 bg-black/30" @click="drawer=false"></div><aside class="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl p-4 overflow-y-auto"><div class="flex items-center justify-between mb-2"><h3 class="text-lg font-bold">Tu carrito</h3><button class="text-slate-500" @click="drawer=false">✕</button></div><template x-if="cart.length===0"><p class="text-sm text-slate-500">No hay productos en el carrito.</p></template><div class="divide-y" x-show="cart.length"><template x-for="(ci,idx) in cart" :key="ci.__id"><div class="py-3 flex gap-3 items-center"><img :src="ci.imagen || 'https://picsum.photos/seed/'+ci.__id+'/100/100'" class="w-16 h-16 rounded-lg object-cover border"><div class="flex-1"><div class="font-medium line-clamp-1" x-text="ci.nombre"></div><div class="text-sm text-slate-500" x-text="fmtPrice(ci.precio)"></div><div class="flex items-center gap-2 mt-1"><button class="px-2 border rounded" @click="dec(idx)">-</button><span x-text="ci.cant"></span><button class="px-2 border rounded" @click="inc(idx)">+</button></div></div><div class="text-right"><div class="font-semibold" x-text="fmtPrice(ci.precio*ci.cant)"></div><button class="text-xs text-rose-600 mt-1" @click="remove(idx)">Eliminar</button></div></div></template></div><div class="mt-4 bg-slate-50 border rounded-2xl p-3" x-show="cart.length"><div class="flex items-center justify-between"><span>Subtotal</span><strong x-text="fmtPrice(total())"></strong></div><p class="text-xs text-slate-500 mt-1">Solo retiro en local.</p></div><div class="mt-4 space-y-2" x-show="cart.length"><input class="w-full border rounded-xl px-3 py-2" placeholder="Tu nombre" x-model="buyer.name"><input class="w-full border rounded-xl px-3 py-2" placeholder="Teléfono / WhatsApp" x-model="buyer.phone"></div><button class="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-3 rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed" :disabled="!canPay" @click="pay()">Pagar con Mercado Pago</button></aside></div><footer class="max-w-6xl mx-auto px-4 py-10 text-center text-xs text-slate-500"><p>© <span x-text="dayjs().format('YYYY')"></span> eltelepesca</p></footer><script>function storeApp(){return {products: [],categories: [],activeCategory: null,query: '',drawer: false,updatedAt: '',cart: JSON.parse(localStorage.getItem('cart')||'[]'),buyer: JSON.parse(localStorage.getItem('buyer')||'{"name":"","phone":""}'),canPay: false,isAdmin: false,adminKey: 'tele2025',init(){const p=new URLSearchParams(location.search);this.isAdmin=p.get('admin')===this.adminKey;this.syncPayAvailability();this.autoLoad();},async syncPayAvailability(){try{const res=await fetch('/api/create-preference',{method:'OPTIONS'});this.canPay=res.ok;}catch{ this.canPay=false;}},async autoLoad(){try{const res=await fetch('/data/productos.xlsx',{cache:'no-store'});if(!res.ok) return;const buf=await res.arrayBuffer();const wb=XLSX.read(buf,{type:'array'});const all=[];const cats=new Set();let rowId=1;for(const sheetName of wb.SheetNames){const ws=wb.Sheets[sheetName];const rows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});for(const r of rows){const m=mapRow(r);if(m.nombre && m.precio!==null && m.precio!=='' && !isNaN(Number(m.precio))){const item={__id:`${sheetName}-${rowId++}`,nombre:String(m.nombre).trim(),precio:Number(m.precio),descripcion:(m.descripcion||'').toString().trim(),stock:m.stock? Number(m.stock):'',imagen:(m.imagen||'').toString().trim(),codigo:(m.codigo||'').toString().trim(),categoria:(m.categoria||sheetName).toString().trim()};all.push(item);cats.add(item.categoria);}}}this.products=all;this.categories=Array.from(cats);this.updatedAt=dayjs().format('DD/MM/YYYY HH:mm')+' (archivo del repo)';}catch(e){}},fmtPrice(v){const n=Number(v||0);return n.toLocaleString('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0});},cartCount(){return this.cart.reduce((a,b)=>a+b.cant,0);},total(){return this.cart.reduce((a,b)=>a+(Number(b.precio)||0)*b.cant,0);},filteredProducts(){const q=this.query.trim().toLowerCase();return this.products.filter(p=>{const okCat=!this.activeCategory||(p.categoria===this.activeCategory);const okQ=!q||[p.nombre,p.descripcion,p.categoria,p.codigo].filter(Boolean).join(' ').toLowerCase().includes(q);return okCat && okQ;});},addToCart(item){const idx=this.cart.findIndex(ci=>ci.__id===item.__id);if(idx>-1){this.cart[idx].cant++;}else{this.cart.push({...item,cant:1});}localStorage.setItem('cart',JSON.stringify(this.cart));this.drawer=true;},inc(i){this.cart[i].cant++;this.persistCart();},dec(i){this.cart[i].cant=Math.max(1,this.cart[i].cant-1);this.persistCart();},remove(i){this.cart.splice(i,1);this.persistCart();},persistCart(){localStorage.setItem('cart',JSON.stringify(this.cart));},async pay(){if(!this.buyer.name||!this.buyer.phone){alert('Completá tu nombre y teléfono.');return;}try{const payload={items:this.cart.map(ci=>({title:ci.nombre,quantity:ci.cant,currency_id:'ARS',unit_price:Number(ci.precio)||0})),metadata:{buyer:this.buyer,pickup:true}};const res=await fetch('/api/create-preference',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!res.ok){const t=await res.text();throw new Error(t||'Error creando preferencia');}const data=await res.json();if(data.init_point){window.location.href=data.init_point;}else{alert('Preferencia creada pero sin init_point.');}}catch(err){alert('No se pudo iniciar el pago. '+(err.message||''));}},async handleFile(e){const file=e.target.files[0];if(!file) return;const buf=await file.arrayBuffer();const wb=XLSX.read(buf,{type:'array'});const all=[];const cats=new Set();let rowId=1;for(const sheetName of wb.SheetNames){const ws=wb.Sheets[sheetName];const rows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});for(const r of rows){const m=mapRow(r);if(m.nombre && m.precio!==null && m.precio!=='' && !isNaN(Number(m.precio))){const item={__id:`${sheetName}-${rowId++}`,nombre:String(m.nombre).trim(),precio:Number(m.precio),descripcion:(m.descripcion||'').toString().trim(),stock:m.stock? Number(m.stock):'',imagen:(m.imagen||'').toString().trim(),codigo:(m.codigo||'').toString().trim(),categoria:(m.categoria||sheetName).toString().trim()};all.push(item);cats.add(item.categoria);}}}this.products=all;this.categories=Array.from(cats);this.updatedAt=dayjs().format('DD/MM/YYYY HH:mm')+' (subido por admin)';this.cart=[];this.persistCart();}};function mapRow(r){const keys=Object.keys(r);const get=(...alts)=>{const found=keys.find(k=>alts.some(a=>k.toLowerCase().includes(a)));return found ? r[found]:'';};return {nombre:get('nombre','producto','articulo','descri','detalle','item'),precio:get('precio','$','importe','valor'),descripcion:get('descripcion','detalle','observ'),stock:get('stock','disp'),imagen:get('imagen','foto','url'),codigo:get('codigo','sku','id'),categoria:get('categoria','rubro','familia')};}</script></body></html>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>eltelepesca — Tienda</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/locale/es.js"></script>
+  <script>
+    dayjs.locale('es');
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .line-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    .scrollbar-thin{scrollbar-width:thin} .scrollbar-thin::-webkit-scrollbar{height:8px;width:8px}
+  </style>
+  <!--
+    🔧 Cómo usar esta tienda (resumen rápido)
+    1) Subí tu Excel con una o varias solapas (por ej. "caña" y "reel").
+       La tienda leerá cada solapa como una categoría.
+       Columnas mínimas por cada hoja: NOMBRE, PRECIO
+       Columnas opcionales: DESCRIPCION, STOCK, IMAGEN (URL), CODIGO, CATEGORIA
+       *No importa mayúsculas/minúsculas — se detectan automático.
+
+    2) Los productos se cargan al instante. Para cambiar precios en el futuro,
+       subí un Excel actualizado y listo.
+
+    3) El carrito crea una preferencia en Mercado Pago vía /api/create-preference (serverless).
+       Debés desplegar esta página en Netlify (recomendado) o Cloudflare Pages
+       y crear la función indicada al final de este archivo.
+
+    4) Esta tienda es SOLO retiro en local — sin envíos. El checkout lo aclara.
+
+    🧪 Probalo sin backend: el botón de pagar quedará deshabilitado hasta que
+       exista la función /api/create-preference.
+  -->
+</head>
+<body class="bg-slate-50 text-slate-800" x-data="storeApp()" x-init="init()">
+  <header class="sticky top-0 z-30 backdrop-blur bg-white/80 border-b border-slate-200">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-8 h-8 text-sky-600"><path fill="currentColor" d="M6 3c.552 0 1 .448 1 1v2.382l2.724 1.362a8.5 8.5 0 1 1-1.05 1.7L6 8.118V20a1 1 0 1 1-2 0V4c0-.552.448-1 1-1zm8.5 5a6.5 6.5 0 1 0 0 13a6.5 6.5 0 0 0 0-13M14 13a1 1 0 0 1 1-1h2.25a.75.75 0 0 1 0 1.5H15v1h1.25a.75.75 0 0 1 0 1.5H15v1.25a.75.75 0 0 1-1.5 0V13Z"/></svg>
+      <div class="flex-1">
+        <h1 class="text-xl font-bold tracking-tight">eltelepesca</h1>
+        <p class="text-xs text-slate-500">Tienda con retiro en local • Actualizá precios subiendo tu Excel</p>
+      </div>
+      <label class="inline-flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-xl" x-show="isAdmin">
+        <input type="file" class="hidden" accept=".xlsx,.xls,.csv" @change="handleFile($event)" />
+        📄 Subir Excel (solo admin)
+      </label>
+      <button @click="drawer=true" class="relative bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-xl font-semibold">
+        🛒 Carrito
+        <span class="absolute -top-2 -right-2 bg-emerald-500 text-white text-xs px-2 py-0.5 rounded-full" x-text="cartCount()"></span>
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-6 grid grid-cols-1 md:grid-cols-4 gap-6">
+    <!-- Filtros -->
+    <aside class="md:col-span-1">
+      <div class="bg-white rounded-2xl shadow-sm border p-4 sticky top-20">
+        <h2 class="font-semibold mb-2">Categorías</h2>
+        <div class="space-y-1" x-show="categories.length">
+          <button class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100"
+                  :class="{'bg-sky-50 text-sky-700': activeCategory===null}"
+                  @click="activeCategory=null">Todas</button>
+          <template x-for="cat in categories" :key="cat">
+            <button class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100"
+                    :class="{'bg-sky-50 text-sky-700': activeCategory===cat}"
+                    @click="activeCategory=cat" x-text="cat"></button>
+          </template>
+        </div>
+        <template x-if="!categories.length">
+          <p class="text-sm text-slate-500">Subí el Excel para ver categorías.</p>
+        </template>
+        <hr class="my-4">
+        <h2 class="font-semibold mb-2">Búsqueda</h2>
+        <input type="search" class="w-full border rounded-xl px-3 py-2" placeholder="Buscar producto..." x-model="query">
+      </div>
+      <div class="mt-6 bg-amber-50 border-amber-200 text-amber-800 border rounded-2xl p-4">
+        <strong>Retiro en local</strong>
+        <p class="text-sm mt-1">No realizamos envíos. Coordiná el retiro por WhatsApp: <a href="https://wa.me/541165780247" target="_blank" class="underline">11 6578 0247</a>.</p>
+      </div>
+    </aside>
+
+    <!-- Productos -->
+    <section class="md:col-span-3">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold">Productos</h2>
+        <p class="text-sm text-slate-500" x-show="updatedAt">Lista cargada: <span x-text="updatedAt"></span></p>
+      </div>
+      <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <template x-for="item in filteredProducts()" :key="item.__id">
+          <div class="bg-white rounded-2xl border shadow-sm overflow-hidden flex flex-col">
+            <div class="h-36 bg-slate-100 relative">
+              <img :src="item.imagen || 'https://picsum.photos/seed/'+item.__id+'/600/400'" alt="" class="w-full h-full object-cover">
+              <span class="absolute left-2 top-2 text-xs bg-white/90 px-2 py-0.5 rounded-full border" x-text="item.categoria || 'General'"></span>
+            </div>
+            <div class="p-4 flex-1 flex flex-col">
+              <h3 class="font-semibold line-clamp-2" x-text="item.nombre || 'Producto' "></h3>
+              <p class="text-sm text-slate-500 mt-1 line-clamp-2" x-text="item.descripcion || ''"></p>
+              <div class="mt-auto">
+                <div class="flex items-center justify-between mt-3">
+                  <span class="text-lg font-bold" x-text="fmtPrice(item.precio)"></span>
+                  <span class="text-xs text-slate-500" x-text="item.stock ? ('Stock: '+item.stock) : ''"></span>
+                </div>
+                <button class="w-full mt-3 bg-sky-600 hover:bg-sky-700 text-white px-3 py-2 rounded-xl font-semibold" @click="addToCart(item)">Agregar</button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+      <div class="mt-4 p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm" x-show="!products.length">
+        No pudimos mostrar productos.
+        <ul class="list-disc ml-5 mt-1">
+          <li>Verificá que <code>/data/productos.xlsx</code> exista en el repo (público).</li>
+          <li>La planilla debe tener columnas de <strong>nombre</strong> y <strong>precio</strong> (aceptamos sinónimos).</li>
+          <li>El precio puede estar en formato ARS (ej: <code>$ 25.999,00</code>), ya lo interpretamos automático.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <!-- Drawer Carrito -->
+  <div class="fixed inset-0 z-40" x-show="drawer" x-transition.opacity>
+    <div class="absolute inset-0 bg-black/30" @click="drawer=false"></div>
+    <aside class="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl p-4 overflow-y-auto scrollbar-thin" x-show="drawer" x-transition>
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-lg font-bold">Tu carrito</h3>
+        <button class="text-slate-500" @click="drawer=false">✕</button>
+      </div>
+      <template x-if="cart.length===0">
+        <p class="text-sm text-slate-500">No hay productos en el carrito.</p>
+      </template>
+      <div class="divide-y" x-show="cart.length">
+        <template x-for="(ci,idx) in cart" :key="ci.__id">
+          <div class="py-3 flex gap-3 items-center">
+            <img :src="ci.imagen || 'https://picsum.photos/seed/'+ci.__id+'/100/100'" class="w-16 h-16 rounded-lg object-cover border">
+            <div class="flex-1">
+              <div class="font-medium line-clamp-1" x-text="ci.nombre"></div>
+              <div class="text-sm text-slate-500" x-text="fmtPrice(ci.precio)"></div>
+              <div class="flex items-center gap-2 mt-1">
+                <button class="px-2 border rounded" @click="dec(idx)">-</button>
+                <span x-text="ci.cant"></span>
+                <button class="px-2 border rounded" @click="inc(idx)">+</button>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="font-semibold" x-text="fmtPrice(ci.precio*ci.cant)"></div>
+              <button class="text-xs text-rose-600 mt-1" @click="remove(idx)">Eliminar</button>
+            </div>
+          </div>
+        </template>
+      </div>
+      <div class="mt-4 bg-slate-50 border rounded-2xl p-3" x-show="cart.length">
+        <div class="flex items-center justify-between"><span>Subtotal</span><strong x-text="fmtPrice(total())"></strong></div>
+        <p class="text-xs text-slate-500 mt-1">Solo retiro en local. Te vamos a contactar para coordinar.</p>
+      </div>
+      <div class="mt-4 space-y-2" x-show="cart.length">
+        <input class="w-full border rounded-xl px-3 py-2" placeholder="Tu nombre" x-model="buyer.name">
+        <input class="w-full border rounded-xl px-3 py-2" placeholder="Teléfono / WhatsApp" x-model="buyer.phone">
+      </div>
+      <button class="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-3 rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              :disabled="!canPay" @click="pay()">Pagar con Mercado Pago</button>
+      <p class="text-xs text-slate-500 mt-2">Si el botón aparece deshabilitado, falta configurar el backend (/api/create-preference). Ver instrucciones al final del archivo.</p>
+    </aside>
+  </div>
+
+  <footer class="max-w-6xl mx-auto px-4 py-10 text-center text-xs text-slate-500">
+    <p>© <span x-text="dayjs().format('YYYY')"></span> eltelepesca · Hecho con amor por la pesca 🎣</p>
+  </footer>
+
+<script>
+function storeApp(){
+  // Utilidades para parsear formatos ARS (25.999,50 / $ 12.345 / 12345)
+  function parseMoney(v){
+    if (typeof v === 'number') return v;
+    if (v == null) return NaN;
+    let s = String(v).trim();
+    // quitar símbolos y espacios
+    s = s.replace(/[^0-9,.-]/g, '');
+    if (s.includes(',')) { // formato latino: 25.999,50
+      s = s.replace(/\./g, '');
+      s = s.replace(/,/g, '.');
+    }
+    const n = Number(s);
+    return isFinite(n) ? n : NaN;
+  }
+  function parseIntSafe(v){
+    const n = parseInt(String(v).replace(/[^0-9-]/g,''),10);
+    return isFinite(n) ? n : 0;
+  }
+  return {
+    products: [],
+    isAdmin: false,
+    adminKey: 'tele2025',
+    categories: [],
+    activeCategory: null,
+    query: '',
+    drawer: false,
+    updatedAt: '',
+    cart: JSON.parse(localStorage.getItem('cart')||'[]'),
+    buyer: JSON.parse(localStorage.getItem('buyer')||'{"name":"","phone":""}'),
+    canPay: false,
+
+    init(){
+      const p = new URLSearchParams(location.search);
+      this.isAdmin = p.get('admin') === this.adminKey;
+      this.syncPayAvailability();
+      // Carga automática desde el repo (sin que el cliente suba nada)
+      this.autoLoad();
+      window.addEventListener('storage', ()=>{ this.cart = JSON.parse(localStorage.getItem('cart')||'[]'); });
+    },
+
+    // Detecta si el endpoint backend está disponible (Netlify/Cloudflare)
+    async syncPayAvailability(){
+      try{
+        const res = await fetch('/api/create-preference', { method:'OPTIONS' });
+        this.canPay = res.ok;
+      }catch{ this.canPay = false; }
+    },
+
+    // Carga catálogo desde /data/productos.xlsx del repo
+    async autoLoad(){
+      try{
+        const res = await fetch('/data/productos.xlsx', { cache: 'no-store' });
+        if(!res.ok) return;
+        const buf = await res.arrayBuffer();
+        const wb = XLSX.read(buf, { type:'array' });
+        const all = [];
+        const cats = new Set();
+        let rowId = 1;
+        for(const sheetName of wb.SheetNames){
+          const ws = wb.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(ws, { defval:'', raw:true });
+          for(const r of rows){
+            const m = mapRow(r);
+            const _price = parseMoney(m.precio);
+            if(m.nombre && !isNaN(_price)){
+              const item = { __id: `${sheetName}-${rowId++}`,
+                nombre: String(m.nombre).trim(),
+              precio: _price,
+                descripcion: (m.descripcion||'').toString().trim(),
+                stock: m.stock? parseIntSafe(m.stock): '',
+                imagen: (m.imagen||'').toString().trim(),
+                codigo: (m.codigo||'').toString().trim(),
+                categoria: (m.categoria||sheetName).toString().trim() };
+              all.push(item);
+              cats.add(item.categoria);
+            }
+          }
+        }
+        this.products = all;
+        this.categories = Array.from(cats);
+        this.updatedAt = dayjs().format('DD/MM/YYYY HH:mm') + ' (archivo del repo)';
+      }catch(e){ /* no-op */ }
+    },
+
+    fmtPrice(v){
+      const n = Number(v||0);
+      return n.toLocaleString('es-AR',{style:'currency', currency:'ARS', maximumFractionDigits:0});
+    },
+
+    cartCount(){ return this.cart.reduce((a,b)=>a+b.cant,0); },
+    total(){ return this.cart.reduce((a,b)=>a + (Number(b.precio)||0)*b.cant, 0); },
+
+    filteredProducts(){
+      const q = this.query.trim().toLowerCase();
+      return this.products.filter(p => {
+        const okCat = !this.activeCategory || (p.categoria===this.activeCategory);
+        const okQ = !q || [p.nombre, p.descripcion, p.categoria, p.codigo].filter(Boolean).join(' ').toLowerCase().includes(q);
+        return okCat && okQ;
+      });
+    },
+
+    addToCart(item){
+      const idx = this.cart.findIndex(ci => ci.__id===item.__id);
+      if(idx>-1){ this.cart[idx].cant++; }
+      else{ this.cart.push({...item, cant:1}); }
+      localStorage.setItem('cart', JSON.stringify(this.cart));
+      this.drawer=true;
+    },
+    inc(i){ this.cart[i].cant++; this.persistCart(); },
+    dec(i){ this.cart[i].cant = Math.max(1, this.cart[i].cant-1); this.persistCart(); },
+    remove(i){ this.cart.splice(i,1); this.persistCart(); },
+    persistCart(){ localStorage.setItem('cart', JSON.stringify(this.cart)); },
+
+    async pay(){
+      if(!this.buyer.name || !this.buyer.phone){ alert('Completá tu nombre y teléfono para coordinar el retiro.'); return; }
+      localStorage.setItem('buyer', JSON.stringify(this.buyer));
+      try{
+        const payload = { items: this.cart.map(ci => ({ title: ci.nombre, quantity: ci.cant, currency_id: 'ARS', unit_price: Number(ci.precio)||0 })),
+                          metadata: { buyer: this.buyer, pickup: true } };
+        const res = await fetch('/api/create-preference', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        if(!res.ok){ const t = await res.text(); throw new Error(t||'Error creando preferencia'); }
+        const data = await res.json();
+        if(data.init_point){ window.location.href = data.init_point; }
+        else{ alert('Preferencia creada pero sin init_point. Revisá tu backend.'); }
+      }catch(err){ alert('No se pudo iniciar el pago. '+(err.message||'')); }
+    },
+
+    // Lee Excel/XLSX y construye productos
+    async handleFile(e){
+      const file = e.target.files[0];
+      if(!file) return;
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type:'array' });
+      const all = [];
+      const cats = new Set();
+      let rowId = 1;
+      for(const sheetName of wb.SheetNames){
+        const ws = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval:'', raw:true });
+        for(const r of rows){
+          const m = mapRow(r);
+          const _price = parseMoney(m.precio);
+            if(m.nombre && !isNaN(_price)){
+            const item = { __id: `${sheetName}-${rowId++}`,
+              nombre: String(m.nombre).trim(),
+              precio: _price,
+              descripcion: (m.descripcion||'').toString().trim(),
+              stock: m.stock? parseIntSafe(m.stock): '',
+              imagen: (m.imagen||'').toString().trim(),
+              codigo: (m.codigo||'').toString().trim(),
+              categoria: (m.categoria||sheetName).toString().trim() };
+            all.push(item);
+            cats.add(item.categoria);
+          }
+        }
+      }
+      this.products = all;
+      this.categories = Array.from(cats);
+      this.updatedAt = dayjs().format('DD/MM/YYYY HH:mm');
+      // Limpia carrito si los IDs cambiaron
+      this.cart = [];
+      this.persistCart();
+    }
+  }
+
+  // Detecta columnas en español común: nombre, precio, etc.
+  function mapRow(r){
+    const keys = Object.keys(r);
+    const get = (...alts)=>{
+      const found = keys.find(k => alts.some(a => k.toLowerCase().includes(a)));
+      return found ? r[found] : '';
+    };
+    return {
+      nombre: get('nombre','producto','articulo','descri','detalle','item'),
+      precio: get('precio','$','importe','valor'),
+      descripcion: get('descripcion','detalle','observ'),
+      stock: get('stock','disp'),
+      imagen: get('imagen','foto','url'),
+      codigo: get('codigo','sku','id'),
+      categoria: get('categoria','rubro','familia')
+    };
+  }
+}
+</script>
+
+<!-- ======================= BACKEND (crear preferencia MP) =======================
+
+Opción A — Netlify (simple y gratis)
+1) Guardá este archivo como index.html en tu repo.
+2) Creá la carpeta netlify/functions y el archivo create-preference.js con el contenido de abajo.
+3) En Netlify, Site settings → Environment variables:
+   - MP_ACCESS_TOKEN = APP_USR-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-xxxxxxxx
+4) Deploy. Tu endpoint quedará en /api/create-preference automáticamente.
+
+Ruta del archivo: netlify/functions/create-preference.js
+---------------------------------------------------------------------------- -->
+<script type="text/plain" id="netlify-function-create-preference.js">
+export async function handler(event) {
+  const allow = {
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    }
+  };
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, ...allow };
+  if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed', ...allow };
+  try {
+    const { items = [], metadata = {} } = JSON.parse(event.body || '{}');
+    if (!Array.isArray(items) || items.length === 0) {
+      return { statusCode: 400, body: 'Items requeridos', ...allow };
+    }
+    const ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN;
+    if (!ACCESS_TOKEN) {
+      return { statusCode: 500, body: 'Falta MP_ACCESS_TOKEN', ...allow };
+    }
+
+    const prefBody = {
+      items: items.map(it => ({
+        title: String(it.title).slice(0, 250),
+        quantity: Number(it.quantity)||1,
+        currency_id: 'ARS',
+        unit_price: Number(it.unit_price)||0
+      })),
+      metadata,
+      shipments: { mode: 'not_specified' }, // sin envíos
+      back_urls: {
+        success: 'https://tu-dominio.netlify.app/?pago=ok',
+        failure: 'https://tu-dominio.netlify.app/?pago=error',
+        pending: 'https://tu-dominio.netlify.app/?pago=pending'
+      },
+      auto_return: 'approved',
+      notification_url: '' // opcional: tu webhook
+    };
+
+    const resp = await fetch('https://api.mercadopago.com/checkout/preferences', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(prefBody)
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      return { statusCode: resp.status, body: JSON.stringify(data), ...allow };
+    }
+    return { statusCode: 200, body: JSON.stringify({ id: data.id, init_point: data.init_point }), ...allow };
+  } catch (err) {
+    return { statusCode: 500, body: String(err), ...allow };
+  }
+}
+</script>
+
+<!--
+Opción B — Cloudflare Pages Functions
+- Creá /functions/api/create-preference.ts con el siguiente handler (Deno/CF):
+
+export const onRequestOptions: PagesFunction = async () => new Response(null, { headers: {
+  'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type'
+}});
+
+export const onRequestPost: PagesFunction = async ({ request, env }) => {
+  const ACCESS_TOKEN = env.MP_ACCESS_TOKEN;
+  if (!ACCESS_TOKEN) return new Response('Falta MP_ACCESS_TOKEN', { status: 500 });
+  const { items = [], metadata = {} } = await request.json();
+  if (!Array.isArray(items) || !items.length) return new Response('Items requeridos', { status: 400 });
+  const body = {
+    items: items.map(it => ({ title: String(it.title).slice(0,250), quantity: Number(it.quantity)||1, currency_id:'ARS', unit_price:Number(it.unit_price)||0})),
+    metadata,
+    shipments: { mode: 'not_specified' },
+    back_urls: { success: 'https://tu-dominio.pages.dev/?pago=ok', failure: 'https://tu-dominio.pages.dev/?pago=error', pending: 'https://tu-dominio.pages.dev/?pago=pending' },
+    auto_return: 'approved'
+  };
+  const resp = await fetch('https://api.mercadopago.com/checkout/preferences', {
+    method:'POST', headers: { 'Authorization': `Bearer ${ACCESS_TOKEN}`, 'Content-Type':'application/json' }, body: JSON.stringify(body)
+  });
+  const data = await resp.json();
+  if (!resp.ok) return new Response(JSON.stringify(data), { status: resp.status });
+  return new Response(JSON.stringify({ id: data.id, init_point: data.init_point }), { headers: { 'Content-Type':'application/json' } });
+};
+
+================================================================================
+
+🗂️ SUGERENCIA DE ESTRUCTURA DE EXCEL
+- Una hoja por categoría: "caña", "reel", etc.
+- Columnas ejemplo (títulos libres):
+  NOMBRE | PRECIO | DESCRIPCION | STOCK | IMAGEN | CODIGO
+
+El sistema detecta nombres similares (precio, importe, $) y no distingue mayúsculas.
+
+✅ Tips
+- Si no tenés URL de imagen, se muestra una imagen genérica.
+- Para ocultar un producto, borralo de la hoja o poné precio vacío.
+- Cambiá precios: subí el Excel nuevo y listo.
+
+💡 Hosting recomendado
+- Netlify: subís este index.html y la función en netlify/functions. Poné MP_ACCESS_TOKEN en variables de entorno.
+- Dominio/Nombre: configurá tu dominio "eltelepesca" o subdominio gratis en Netlify.
+
+-- FIN --
+-- Archivo único con frontend y ejemplos de backend en comentarios --
+-- Guardá esto como index.html --
+-- ¡Éxitos y buenas ventas! 🎣 --
+-- -->
+</body>
+</html>
