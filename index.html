@@ -10,93 +10,329 @@
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/locale/es.js"></script>
   <script>dayjs.locale('es');</script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .line-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    .scrollbar-thin{scrollbar-width:thin}.scrollbar-thin::-webkit-scrollbar{height:8px;width:8px}
+  </style>
 </head>
 <body class="bg-slate-50 text-slate-800" x-data="storeApp()" x-init="init()">
-  <main class="max-w-6xl mx-auto px-4 py-6">
-    <h2 class="text-lg font-semibold mb-4">Productos</h2>
-    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <template x-for="item in products" :key="item.__id">
-        <div class="bg-white rounded-2xl border shadow-sm overflow-hidden flex flex-col hover:shadow-md transition">
-          <div class="h-36 bg-slate-100 relative">
-            <img :src="item.imagen || ('https://picsum.photos/seed/'+item.__id+'/600/400')"
-                 class="w-full h-full object-cover"
-                 :class="{'grayscale opacity-70': (item.stock_num||0) <= 0}">
-            <div x-show="(item.stock_num||0) <= 0"
-                 class="absolute -right-8 top-3 rotate-45 bg-rose-600 text-white text-xs font-bold px-10 py-1 shadow">
-              SIN STOCK
-            </div>
-          </div>
-          <div class="p-4 flex-1 flex flex-col">
-            <h3 class="font-semibold" x-text="item.nombre"></h3>
-            <p class="text-xs text-slate-500 mt-1" x-text="item.descripcion"></p>
-            <p class="text-xs text-slate-500 mt-1" x-text="(item.stock_num||0) > 0 ? ('Stock: '+item.stock_num) : 'Sin stock'"></p>
-            <div class="mt-auto">
-              <div class="flex flex-col items-start mt-3">
-                <span class="text-lg font-bold text-emerald-700" x-text="fmtPrice(item.precio_transfer)+' (Transf.)'"></span>
-                <span class="text-sm font-semibold text-sky-700" x-text="fmtPrice(item.precio_mp)+' (MP)'"></span>
-              </div>
-              <button class="w-full mt-3 bg-sky-600 hover:bg-sky-700 text-white px-3 py-2 rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                      :disabled="(item.stock_num||0) <= 0"
-                      @click="addToCart(item)">
-                <span x-show="(item.stock_num||0) > 0">Agregar</span>
-                <span x-show="(item.stock_num||0) <= 0">Sin stock</span>
-              </button>
-            </div>
-          </div>
+  <!-- Header -->
+  <header class="sticky top-0 z-30 backdrop-blur bg-white/80 border-b border-slate-200">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+      <div class="flex-1">
+        <a href="./" class="text-xl font-bold tracking-tight">eltelepesca</a>
+        <p class="text-xs text-slate-500">Tienda con retiro en local</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="search" placeholder="Buscar..." class="hidden sm:block border rounded-2xl px-3 py-2" x-model="query">
+        <button @click="drawer=true" class="relative bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-xl font-semibold">
+          🛒 Carrito
+          <span class="absolute -top-2 -right-2 bg-emerald-500 text-white text-xs px-2 py-0.5 rounded-full" x-text="cartCount()"></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-6 grid grid-cols-1 md:grid-cols-4 gap-6">
+    <!-- Sidebar filtros -->
+    <aside class="md:col-span-1">
+      <div class="bg-white rounded-2xl shadow-sm border p-4 sticky top-20">
+        <h2 class="font-semibold mb-2">Categorías</h2>
+        <div class="space-y-1" x-show="categories.length">
+          <button class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100"
+                  :class="{'bg-sky-50 text-sky-700': activeCategory===null}"
+                  @click="activeCategory=null">Todas</button>
+          <template x-for="cat in categories" :key="cat">
+            <button class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100"
+                    :class="{'bg-sky-50 text-sky-700': activeCategory===cat}"
+                    @click="activeCategory=cat" x-text="cat"></button>
+          </template>
+        </div>
+        <template x-if="!categories.length">
+          <p class="text-sm text-slate-500">Cargando categorías…</p>
+        </template>
+
+        <hr class="my-4">
+        <h2 class="font-semibold mb-2">Búsqueda</h2>
+        <input type="search" class="w-full border rounded-2xl px-3 py-2" placeholder="Buscar producto..." x-model="query">
+
+        <div class="mt-4 flex items-center gap-2">
+          <input id="hideNoStock" type="checkbox" class="w-4 h-4" x-model="hideNoStock">
+          <label for="hideNoStock" class="text-sm">Ocultar sin stock</label>
+        </div>
+      </div>
+
+      <div class="mt-6 bg-amber-50 border-amber-200 text-amber-800 border rounded-2xl p-4">
+        <strong>Retiro en local</strong>
+        <p class="text-sm mt-1">No realizamos envíos. Coordiná el retiro por WhatsApp: <a href="https://wa.me/541165780247" target="_blank" class="underline">11 6578 0247</a>.</p>
+      </div>
+    </aside>
+
+    <!-- Lista de productos -->
+    <section class="md:col-span-3">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold">Productos</h2>
+        <p class="text-sm text-slate-500" x-show="updatedAt">Lista cargada: <span x-text="updatedAt"></span></p>
+      </div>
+
+      <template x-if="!products.length && !loading">
+        <div class="bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl p-4">
+          <strong>No hay productos para mostrar.</strong>
+          <p class="text-sm mt-1">Verificá que el archivo <code>data/productos.xlsx</code> exista en el deploy y tenga precios válidos.</p>
+          <p class="text-xs mt-1">Probá abrir: <code>/data/productos.xlsx</code></p>
         </div>
       </template>
-    </div>
+
+      <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4" x-show="products.length">
+        <template x-for="item in filteredProducts()" :key="item.__id">
+          <div class="bg-white rounded-2xl border shadow-sm overflow-hidden flex flex-col hover:shadow-md transition">
+            <a :href="'product.html?id='+encodeURIComponent(item.__id)" class="h-36 bg-slate-100 relative block">
+              <img :src="item.imagen || ('https://picsum.photos/seed/'+item.__id+'/600/400')"
+                   class="w-full h-full object-cover"
+                   :class="{'grayscale opacity-70': (item.stock_num||0) <= 0}">
+              <span class="absolute left-2 top-2 text-xs bg-white/90 px-2 py-0.5 rounded-full border" x-text="item.categoria || 'General'"></span>
+              <!-- Cinta SIN STOCK -->
+              <div x-show="(item.stock_num||0) <= 0"
+                   class="absolute -right-8 top-3 rotate-45 bg-rose-600 text-white text-xs font-bold px-10 py-1 shadow">
+                SIN STOCK
+              </div>
+            </a>
+            <div class="p-4 flex-1 flex flex-col">
+              <a :href="'product.html?id='+encodeURIComponent(item.__id)" class="text-left block">
+                <h3 class="font-semibold line-clamp-2" x-text="item.nombre || 'Producto' "></h3>
+                <p class="text-sm text-slate-500 mt-1 line-clamp-2" x-text="item.descripcion || ''"></p>
+              </a>
+              <p class="text-xs text-slate-500 mt-1" x-text="(item.stock_num||0) > 0 ? ('Stock: '+item.stock_num) : 'Sin stock'"></p>
+              <div class="mt-auto">
+                <div class="flex flex-col items-start mt-3">
+                  <span class="text-lg font-bold text-emerald-700" x-text="fmtPrice(item.precio_transfer)+' (Transferencia)'"></span>
+                  <span class="text-sm font-semibold text-sky-700" x-text="fmtPrice(item.precio_mp)+' (Mercado Pago)'"></span>
+                </div>
+                <button class="w-full mt-3 bg-sky-600 hover:bg-sky-700 text-white px-3 py-2 rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                        :disabled="(item.stock_num||0) <= 0"
+                        @click="addToCart(item)">
+                  <span x-show="(item.stock_num||0) > 0">Agregar</span>
+                  <span x-show="(item.stock_num||0) <= 0">Sin stock</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </section>
   </main>
+
+  <!-- Drawer Carrito -->
+  <div class="fixed inset-0 z-40" x-show="drawer" x-transition.opacity>
+    <div class="absolute inset-0 bg-black/30" @click="drawer=false"></div>
+    <aside class="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl p-4 overflow-y-auto scrollbar-thin" x-show="drawer" x-transition>
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-lg font-bold">Tu carrito</h3>
+        <button class="text-slate-500" @click="drawer=false">✕</button>
+      </div>
+
+      <template x-if="cart.length===0">
+        <p class="text-sm text-slate-500">No hay productos en el carrito.</p>
+      </template>
+
+      <div class="divide-y" x-show="cart.length">
+        <template x-for="(ci,idx) in cart" :key="ci.__id">
+          <div class="py-3 flex gap-3 items-center">
+            <img :src="ci.imagen || ('https://picsum.photos/seed/'+ci.__id+'/100/100')" class="w-16 h-16 rounded-lg object-cover border">
+            <div class="flex-1">
+              <div class="font-medium line-clamp-1" x-text="ci.nombre"></div>
+              <div class="text-xs text-slate-500 mt-0.5">
+                <div><span x-text="fmtPrice(ci.precio_transfer)"></span> <span class="text-emerald-700 font-medium">Transferencia</span></div>
+                <div><span x-text="fmtPrice(ci.precio_mp)"></span> <span class="text-sky-700 font-medium">Mercado Pago</span></div>
+                <div class="mt-1 text-[11px]" x-text="'Stock disponible: '+(ci.stock_num||0)"></div>
+              </div>
+              <div class="flex items-center gap-2 mt-2">
+                <button class="px-2 border rounded" @click="dec(idx)">-</button>
+                <span x-text="ci.cant"></span>
+                <button class="px-2 border rounded" @click="inc(idx)">+</button>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs text-slate-500">Parcial T:</div>
+              <div class="font-semibold text-emerald-700" x-text="fmtPrice(ci.precio_transfer*ci.cant)"></div>
+              <div class="text-xs text-slate-500">Parcial MP:</div>
+              <div class="font-semibold text-sky-700" x-text="fmtPrice(ci.precio_mp*ci.cant)"></div>
+              <button class="text-xs text-rose-600 mt-1" @click="remove(idx)">Eliminar</button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <div class="mt-4 grid grid-cols-2 gap-3" x-show="cart.length">
+        <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3">
+          <div class="text-xs text-slate-600">Total Transferencia</div>
+          <div class="text-lg font-bold text-emerald-700" x-text="fmtPrice(totalTransfer())"></div>
+          <div class="text-xs text-slate-500 mt-1">Alias: <span class="font-mono">eltele2</span></div>
+          <button class="mt-2 w-full px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold" @click="sendWhatsApp('transfer')">Confirmar por WhatsApp</button>
+        </div>
+        <div class="bg-sky-50 border border-sky-200 rounded-2xl p-3">
+          <div class="text-xs text-slate-600">Total Mercado Pago</div>
+          <div class="text-lg font-bold text-sky-700" x-text="fmtPrice(totalMP())"></div>
+          <button class="mt-2 w-full px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-semibold" @click="payMP()">Pagar con MP</button>
+        </div>
+      </div>
+
+      <div class="mt-4 space-y-2" x-show="cart.length">
+        <input class="w-full border rounded-xl px-3 py-2" placeholder="Tu nombre" x-model="buyer.name">
+        <input class="w-full border rounded-xl px-3 py-2" placeholder="Teléfono / WhatsApp" x-model="buyer.phone">
+      </div>
+    </aside>
+  </div>
 
 <script>
 function storeApp(){
   const MP_RATE = 1.10;
+  const WHATSAPP_TO = '541165780247';
+
   function num(v){ if(typeof v==='number') return v; if(v==null) return NaN; let s=String(v).trim().replace(/[^0-9,.-]/g,''); if(s.includes(',')){ s=s.replace(/\./g,''); s=s.replace(/,/g,'.'); } const n=Number(s); return isFinite(n)?n:NaN; }
   function pick(o,ks){ for(const k of ks){ if(o[k]!=null&&o[k]!=='') return o[k]; } }
+
   return {
-    products:[], cart: JSON.parse(localStorage.getItem('cart')||'[]'),
+    // estado
+    products:[], categories:[], activeCategory:null, query:'', hideNoStock:false,
+    drawer:false, loading:true, updatedAt:'',
+    cart: JSON.parse(localStorage.getItem('cart')||'[]'),
+    buyer: JSON.parse(localStorage.getItem('buyer')||'{"name":"","phone":""}'),
+
+    // init
     async init(){
-      const res = await fetch('data/productos.xlsx'); if(!res.ok) return;
-      const buf = await res.arrayBuffer(); const wb = XLSX.read(buf,{type:'array'});
-      const all=[]; let rowId=1;
-      for(const sheetName of wb.SheetNames){
-        const ws = wb.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});
-        for(const r of rows){
-          const row=Object.fromEntries(Object.entries(r).map(([k,v])=>[String(k).toLowerCase().trim(), v]));
-          const nombre = pick(row,['nombre','producto','articulo','descri','detalle','item']);
-          const precioRaw = pick(row,['precio','$','importe','valor','p. lista','precio feria','precio unitario']);
-          if(!nombre||!precioRaw) continue;
-          const base = num(precioRaw); if(isNaN(base)) continue;
-          const stockRaw = pick(row,['stock','disp']);
-          const stock_num = (()=>{ if(!stockRaw) return 0; const s=String(stockRaw).replace(/[^\d-]/g,''); const n=Number(s); return Number.isFinite(n)?n:0; })();
-          all.push({
-            __id: sheetName+'-'+(rowId++),
-            nombre: String(nombre).trim(),
-            precio_transfer: Math.round(base),
-            precio_mp: Math.round(base*MP_RATE),
-            descripcion: String(pick(row,['descripcion','detalle','observ'])||'').trim(),
-            stock: stockRaw||'',
-            stock_num,
-            imagen: String(pick(row,['imagen','foto','url'])||'').trim(),
-            codigo: String(pick(row,['codigo','sku','id'])||'').trim(),
-            categoria: String(pick(row,['categoria','rubro','familia'])||sheetName).trim()
-          });
-        }
-      }
-      this.products=all;
+      await this.autoLoad();
     },
+
+    // carga de Excel
+    async autoLoad(){
+      try{
+        const res = await fetch('data/productos.xlsx', { cache: 'no-store' });
+        if(!res.ok){ this.loading=false; return; }
+        const buf = await res.arrayBuffer();
+        const wb = XLSX.read(buf, { type:'array' });
+
+        const all = []; const cats = new Set(); let rowId=1;
+        for(const sheetName of wb.SheetNames){
+          const ws = wb.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(ws, { defval:'', raw:true });
+          for(const r of rows){
+            const row = Object.fromEntries(Object.entries(r).map(([k,v])=>[String(k).toLowerCase().trim(), v]));
+            const nombre = pick(row, ['nombre','producto','articulo','descri','detalle','item']);
+            const precioRaw = pick(row, ['precio','$','importe','valor','p. lista','precio feria','precio unitario']);
+            const desc = pick(row, ['descripcion','detalle','observ']);
+            const stockRaw = pick(row, ['stock','disp']);
+            const imagen = pick(row, ['imagen','foto','url']);
+            const codigo = pick(row, ['codigo','sku','id']);
+            const categoria = pick(row, ['categoria','rubro','familia']) || sheetName;
+            const base = num(precioRaw);
+
+            // stock_num (número)
+            const stock_num = (()=>{
+              if(!stockRaw) return 0;
+              const s = String(stockRaw).replace(/[^\d-]/g,'');
+              const n = Number(s);
+              return Number.isFinite(n) ? n : 0;
+            })();
+
+            if(nombre && !isNaN(base)){
+              all.push({
+                __id: sheetName+'-'+(rowId++),
+                nombre: String(nombre).trim(),
+                precio_transfer: Math.round(base),
+                precio_mp: Math.round(base * MP_RATE),
+                descripcion: String(desc||'').trim(),
+                stock: stockRaw || '',
+                stock_num,
+                imagen: String(imagen||'').trim(),
+                codigo: String(codigo||'').trim(),
+                categoria: String(categoria).trim(),
+                cant: 0
+              });
+              cats.add(String(categoria).trim());
+            }
+          }
+        }
+        this.products = all;
+        this.categories = Array.from(cats);
+        this.updatedAt = dayjs().format('DD/MM/YYYY HH:mm');
+      }catch(e){
+        console.error('Error leyendo Excel', e);
+      }finally{
+        this.loading=false;
+      }
+    },
+
+    // helpers
     fmtPrice(v){ return Number(v||0).toLocaleString('es-AR',{style:'currency', currency:'ARS', maximumFractionDigits:0}); },
+    cartCount(){ return this.cart.reduce((a,b)=>a+(b.cant||0),0); },
+    totalTransfer(){ return this.cart.reduce((a,b)=>a + (Number(b.precio_transfer)||0)*(b.cant||0), 0); },
+    totalMP(){ return this.cart.reduce((a,b)=>a + (Number(b.precio_mp)||0)*(b.cant||0), 0); },
+
+    // filtros
+    filteredProducts(){
+      const q=this.query.trim().toLowerCase();
+      return this.products.filter(p=>{
+        const okCat=!this.activeCategory||(p.categoria===this.activeCategory);
+        const okQ=!q||[p.nombre,p.descripcion,p.categoria,p.codigo].filter(Boolean).join(' ').toLowerCase().includes(q);
+        const okStock = !this.hideNoStock || (Number(p.stock_num||0) > 0);
+        return okCat && okQ && okStock;
+      });
+    },
+
+    // carrito con control de stock
     addToCart(item){
       const max = Number(item.stock_num||0);
-      if(max<=0){ alert('Sin stock'); return; }
+      if (max <= 0){ alert('Sin stock'); return; }
       const idx=this.cart.findIndex(ci=>ci.__id===item.__id);
       if(idx>-1){
         const next=this.cart[idx].cant+1;
         if(next>max){ alert('No podés superar el stock disponible ('+max+').'); return; }
         this.cart[idx].cant=next;
-      }else{ this.cart.push({...item,cant:1}); }
+      }else{
+        this.cart.push({...item,cant:1});
+      }
       localStorage.setItem('cart', JSON.stringify(this.cart));
+      this.drawer=true;
+    },
+    inc(i){
+      const max=Number(this.cart[i].stock_num||0);
+      const next=this.cart[i].cant+1;
+      if(next>max){ alert('No podés superar el stock disponible ('+max+').'); return; }
+      this.cart[i].cant=next;
+      localStorage.setItem('cart', JSON.stringify(this.cart));
+    },
+    dec(i){
+      this.cart[i].cant=Math.max(1,this.cart[i].cant-1);
+      localStorage.setItem('cart', JSON.stringify(this.cart));
+    },
+    remove(i){
+      this.cart.splice(i,1);
+      localStorage.setItem('cart', JSON.stringify(this.cart));
+    },
+
+    // acciones
+    sendWhatsApp(metodo){
+      if(!this.cart.length){ alert('El carrito está vacío.'); return; }
+      // validación stock
+      for(const ci of this.cart){
+        const max=Number(ci.stock_num||0);
+        if(ci.cant>max||max<=0){ alert('Hay productos sin stock o con cantidad mayor al stock.'); return; }
+      }
+      const lines=this.cart.map(ci=>`• ${ci.cant} x ${ci.nombre}`).join('\n');
+      const texto = encodeURIComponent([
+        'Hola, quiero confirmar mi pedido:',
+        lines,'',
+        'Total Transferencia: ' + this.fmtPrice(this.totalTransfer()),
+        'Total Mercado Pago: ' + this.fmtPrice(this.totalMP()),
+        'Método elegido: ' + (metodo==='transfer'?'Transferencia (alias eltele2)':'Mercado Pago'),
+        'Nombre: ' + (this.buyer.name||''),
+        'Teléfono: ' + (this.buyer.phone||'')
+      ].join('\n'));
+      window.open('https://wa.me/541165780247?text='+texto, '_blank');
+    },
+    async payMP(){
+      alert('Integración MP opcional. Podés desactivarla si solo usás Transferencia.');
     }
   }
 }
