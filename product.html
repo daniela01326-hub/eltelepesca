@@ -23,7 +23,8 @@
   </header>
 
   <main class="max-w-5xl mx-auto px-4 py-6">
-    <template x-if="!product"><p class="text-sm text-slate-500">Cargando…</p></template>
+    <template x-if="!product && !loadError"><p class="text-sm text-slate-500">Cargando…</p></template>
+    <template x-if="loadError"><p class="text-sm text-rose-600">⚠️ No pude leer <code>data/productos.xlsx</code>. Verificá la ruta.</p></template>
     <template x-if="product">
       <div class="grid md:grid-cols-2 gap-6">
         <div class="bg-white rounded-2xl shadow-sm border overflow-hidden">
@@ -40,7 +41,7 @@
           <p class="mt-4 text-slate-700 whitespace-pre-line" x-text="product.descripcion || 'Sin descripción'"></p>
 
           <div class="mt-auto pt-6 flex gap-2">
-            <button class="flex-1 bg-slate-200 hover:bg-slate-300 rounded-xl px-4 py-2" @click="goBack()">Volver</button>
+            <a href="./" class="flex-1 bg-slate-200 hover:bg-slate-300 rounded-xl px-4 py-2 text-center">Volver</a>
             <button class="flex-1 bg-sky-600 hover:bg-sky-700 text-white rounded-xl px-4 py-2 font-semibold" @click="addToCart()">Agregar al carrito</button>
           </div>
         </div>
@@ -51,15 +52,16 @@
 <script>
 function detailApp(){
   const MP_RATE = 1.10;
-  function num(v){ if (typeof v === 'number') return v; if (v==null) return NaN; let s=String(v).trim().replace(/[^0-9,.-]/g,''); if(s.includes(',')){ s=s.replace(/\./g,''); s=s.replace(/,/g,'.'); } const n=Number(s); return isFinite(n)?n:NaN; }
+  function num(v){ if(typeof v==='number') return v; if(v==null) return NaN; let s=String(v).trim().replace(/[^0-9,.-]/g,''); if(s.includes(',')){ s=s.replace(/\./g,''); s=s.replace(/,/g,'.'); } const n=Number(s); return isFinite(n)?n:NaN; }
   function pick(o,ks){ for(const k of ks){ if(o[k]!=null&&o[k]!=='') return o[k]; } }
 
   return {
-    product:null, id:null,
+    product:null, id:null, loadError:false,
     init(){ const p=new URLSearchParams(location.search); this.id=p.get('id'); this.load(); },
     async load(){
       try{
-        const res = await fetch('./data/productos.xlsx', { cache:'no-store' }); if(!res.ok) return;
+        const res = await fetch('data/productos.xlsx', { cache:'no-store' }); // <- RELATIVO
+        if(!res.ok){ this.loadError=true; return; }
         const buf = await res.arrayBuffer(); const wb = XLSX.read(buf,{type:'array'});
         for(const sheetName of wb.SheetNames){
           const ws = wb.Sheets[sheetName];
@@ -85,7 +87,7 @@ function detailApp(){
             }
           }
         }
-      }catch(e){}
+      }catch(e){ this.loadError=true; }
     },
     fmtPrice(v){ return Number(v||0).toLocaleString('es-AR',{style:'currency', currency:'ARS', maximumFractionDigits:0}); },
     addToCart(){
@@ -96,7 +98,6 @@ function detailApp(){
       localStorage.setItem('cart', JSON.stringify(cart));
       alert('Agregado al carrito');
     },
-    goBack(){ history.length > 1 ? history.back() : location.href = './'; }
   }
 }
 </script>
