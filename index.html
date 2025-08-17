@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>eltelepesca — Debug</title>
+  <title>eltelepesca — Tienda</title>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
@@ -34,9 +34,13 @@
       <div class="bg-white rounded-2xl shadow-sm border p-4 sticky top-20">
         <h2 class="font-semibold mb-2">Categorías</h2>
         <div class="space-y-1" x-show="categories.length">
-          <button class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100" :class="{'bg-sky-50 text-sky-700': activeCategory===null}" @click="activeCategory=null">Todas</button>
+          <button class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100"
+                  :class="{'bg-sky-50 text-sky-700': activeCategory===null}"
+                  @click="activeCategory=null">Todas</button>
           <template x-for="cat in categories" :key="cat">
-            <button class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100" :class="{'bg-sky-50 text-sky-700': activeCategory===cat}" @click="activeCategory=cat" x-text="cat"></button>
+            <button class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100"
+                    :class="{'bg-sky-50 text-sky-700': activeCategory===cat}"
+                    @click="activeCategory=cat" x-text="cat"></button>
           </template>
         </div>
         <template x-if="!categories.length">
@@ -78,26 +82,24 @@
           </div>
         </template>
       </div>
-
-      <!-- Panel de depuración -->
-      <div class="mt-6" x-show="debug">
-        <div class="bg-white border rounded-2xl p-4">
-          <h3 class="font-semibold">Debug</h3>
-          <p class="text-xs text-slate-500">Abrí la URL con <code>?debug=1</code> para mostrar esta caja.</p>
-          <div class="mt-2 text-sm space-y-2">
-            <div><strong>Sheets:</strong> <span x-text="debugInfo.sheets?.join(', ')"></span></div>
-            <div class="mt-1"><strong>Primeras claves por hoja:</strong>
-              <template x-for="(keys, sheet) in debugInfo.firstKeys" :key="sheet">
-                <div class="text-xs pl-2 border-l mt-1"><strong x-text="sheet"></strong> → <span x-text="keys"></span></div>
-              </template>
-            </div>
-            <div><strong>Total items cargados:</strong> <span x-text="products.length"></span></div>
-            <div><strong>Errores:</strong> <pre class="whitespace-pre-wrap text-xs" x-text="debugInfo.errors.join('\n')"></pre></div>
-          </div>
-        </div>
-      </div>
     </section>
   </main>
+
+  <!-- Acerca de la tienda -->
+  <section class="max-w-6xl mx-auto px-4">
+    <div class="bg-white rounded-2xl shadow-sm border p-6">
+      <h2 class="text-xl font-semibold">Acerca de la tienda</h2>
+      <p class="mt-3 text-slate-700 leading-relaxed">
+        Casa de pesca con una trayectoria de 45 años, nos pueden encontrar los domingos en la Feria del Parque los derechos del Trabajador - Villa Domínico Partido de Avellaneda, en la calle Darwin y Emilizo Zola desde las 8 a las 15 hs, frente a las vías del tren.
+      </p>
+      <p class="mt-3 text-slate-700 leading-relaxed">
+        Nuestra misión es cumplir con las expectativas del cliente, y que puedan elegir entre la gran variedad y surtido de artículos con los mejores precios. Asesoramiento personalizado y atención de primer nivel.
+      </p>
+      <p class="mt-3 text-slate-700 leading-relaxed">
+        📍 Ubicación: <a href="https://www.google.com/maps/place/el+tele+ivanstg/@-34.6899038,-58.3303484,17z/data=!3m1!4b1!4m6!3m5!1s0x95a333cd433e0c45:0x69a1b7ec7d441d82!8m2!3d-34.6899038!4d-58.3277735!16s%2Fg%2F11jwj0zj8n?entry=ttu&g_ep=EgoyMDI1MDgxMy4wIKXMDSoASAFQAw%3D%3D" target="_blank" class="underline">Emilio Zola & Darwin, Villa Domínico, Provincia de Buenos Aires, Argentina</a>
+      </p>
+    </div>
+  </section>
 
   <footer class="max-w-6xl mx-auto px-4 py-10 text-center text-xs text-slate-500">
     <p>© <span x-text="dayjs().format('YYYY')"></span> eltelepesca · Hecho con amor por la pesca 🎣</p>
@@ -118,106 +120,52 @@ function storeApp(){
     const n = parseInt(String(v).replace(/[^0-9-]/g,''),10);
     return isFinite(n) ? n : 0;
   }
-
   return {
     products: [], categories: [], activeCategory: null, query: '', drawer: false, updatedAt: '',
     cart: JSON.parse(localStorage.getItem('cart')||'[]'),
     buyer: JSON.parse(localStorage.getItem('buyer')||'{"name":"","phone":""}'),
     canPay: false, isAdmin: false, adminKey: 'tele2025',
-    debug: false, debugInfo: { sheets: [], firstKeys: {}, errors: [] },
-
     init(){
       const p = new URLSearchParams(location.search);
       this.isAdmin = p.get('admin') === this.adminKey;
-      this.debug = p.get('debug') === '1';
-      this.syncPayAvailability();
       this.autoLoad();
     },
-
-    async syncPayAvailability(){
-      try{ const res = await fetch('/api/create-preference', { method:'OPTIONS' }); this.canPay = res.ok; }
-      catch{ this.canPay = false; }
-    },
-
     async autoLoad(){
       try{
         const res = await fetch('/data/productos.xlsx', { cache: 'no-store' });
-        if(!res.ok){ this.debugInfo.errors.push('No se pudo abrir /data/productos.xlsx (HTTP '+res.status+').'); return; }
+        if(!res.ok) return;
         const buf = await res.arrayBuffer();
         const wb = XLSX.read(buf, { type:'array' });
-        this.debugInfo.sheets = wb.SheetNames;
-
-        const all = []; const cats = new Set(); let rowId = 1;
+        const all = []; const cats = new Set(); let rowId=1;
         for(const sheetName of wb.SheetNames){
           const ws = wb.Sheets[sheetName];
-          // Leer como tabla cruda para detectar encabezados robustamente
-          const table = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
-          if(!table || !table.length){ continue; }
-          // Encuentro la fila de encabezados: busco palabras clave
-          let hdrIdx = 0;
-          for (let i=0; i<Math.min(table.length, 10); i++){
-            const row = table[i] || [];
-            const lower = row.map(x => String(x||'').toLowerCase());
-            if (lower.some(x => x.includes('nombre') || x.includes('producto') || x.includes('articulo'))) { hdrIdx = i; break; }
-          }
-          const headers = (table[hdrIdx] || []).map(x => String(x||'').toLowerCase());
-          this.debugInfo.firstKeys[sheetName] = headers.join(', ');
-          const dataRows = table.slice(hdrIdx+1);
-
-          for(const row of dataRows){
-            const obj = {};
-            for(let i=0;i<headers.length;i++){ obj[headers[i] || ('col'+i)] = row[i]; }
-
-            const keys = Object.keys(obj);
-            const get = (...alts)=>{
-              const found = keys.find(k => alts.some(a => k.includes(a)));
-              return found ? obj[found] : '';
-            };
-            const m = {
-              nombre: get('nombre','producto','articulo','descri','detalle','item'),
-              precio: get('precio','$','importe','valor'),
-              descripcion: get('descripcion','detalle','observ'),
-              stock: get('stock','disp'),
-              imagen: get('imagen','foto','url','data:'),
-              codigo: get('codigo','sku','id'),
-              categoria: get('categoria','rubro','familia')
-            };
-
-            const _price = parseMoney(m.precio);
-            if(m.nombre && !isNaN(_price)){
-              const item = { __id: sheetName+'-'+(rowId++),
-                nombre: String(m.nombre).trim(),
-                precio: _price,
-                descripcion: (m.descripcion||'').toString().trim(),
-                stock: m.stock? parseIntSafe(m.stock): '',
-                imagen: (m.imagen||'').toString().trim(),
-                codigo: (m.codigo||'').toString().trim(),
-                categoria: (m.categoria||sheetName).toString().trim() };
-              all.push(item); cats.add(item.categoria);
+          const rows = XLSX.utils.sheet_to_json(ws, { defval:'', raw:true });
+          for(const r of rows){
+            const row = Object.fromEntries(Object.entries(r).map(([k,v])=>[String(k).toLowerCase(), v]));
+            const nombre = row['nombre'] || row['producto'] || row['articulo'] || row['descri'] || row['detalle'] || row['item'];
+            const precio = row['precio'] || row['$'] || row['importe'] || row['valor'];
+            const desc = row['descripcion'] || row['detalle'] || row['observ'];
+            const stock = row['stock'] || row['disp'];
+            const imagen = row['imagen'] || row['foto'] || row['url'];
+            const codigo = row['codigo'] || row['sku'] || row['id'];
+            const categoria = row['categoria'] || row['rubro'] || row['familia'] || sheetName;
+            const pnum = (function(v){ if(typeof v==='number') return v; let s=String(v or '').replace(/[^0-9,.-]/g,''); if(s.includes(',')){ s=s.replace(/\./g,''); s=s.replace(/,/g,'.'); } const n=Number(s); return isFinite(n)?n:NaN; }) (precio);
+            if(nombre && !isNaN(pnum)){
+              all.push({ __id: sheetName+'-'+(rowId++), nombre: String(nombre).trim(), precio: pnum,
+                         descripcion: (desc||'').toString().trim(), stock: stock||'', imagen: (imagen||'').toString().trim(),
+                         codigo: (codigo||'').toString().trim(), categoria: String(categoria).trim() });
+              cats.add(String(categoria).trim());
             }
           }
         }
-        this.products = all; this.categories = Array.from(cats);
-        this.updatedAt = dayjs().format('DD/MM/YYYY HH:mm') + ' (archivo del repo)';
-      }catch(e){
-        this.debugInfo.errors.push(String(e));
-      }
+        this.products=all; this.categories=Array.from(cats);
+        this.updatedAt = dayjs().format('DD/MM/YYYY HH:mm');
+      }catch(e){}
     },
-
-    fmtPrice(v){ const n = Number(v||0); return n.toLocaleString('es-AR',{style:'currency', currency:'ARS', maximumFractionDigits:0}); },
+    fmtPrice(v){ const n=Number(v||0); return n.toLocaleString('es-AR',{style:'currency', currency:'ARS', maximumFractionDigits:0}); },
     cartCount(){ return this.cart.reduce((a,b)=>a+b.cant,0); },
-    filteredProducts(){
-      const q = this.query.trim().toLowerCase();
-      return this.products.filter(p=>{
-        const okCat = !this.activeCategory || (p.categoria===this.activeCategory);
-        const okQ = !q || [p.nombre,p.descripcion,p.categoria,p.codigo].filter(Boolean).join(' ').toLowerCase().includes(q);
-        return okCat && okQ;
-      });
-    },
-    addToCart(item){ const idx=this.cart.findIndex(ci=>ci.__id===item.__id); if(idx>-1){ this.cart[idx].cant++; } else { this.cart.push({...item,cant:1}); } localStorage.setItem('cart', JSON.stringify(this.cart)); this.drawer=true; },
-    inc(i){ this.cart[i].cant++; localStorage.setItem('cart', JSON.stringify(this.cart)); },
-    dec(i){ this.cart[i].cant=Math.max(1,this.cart[i].cant-1); localStorage.setItem('cart', JSON.stringify(this.cart)); },
-    remove(i){ this.cart.splice(i,1); localStorage.setItem('cart', JSON.stringify(this.cart)); },
+    filteredProducts(){ const q=this.query.trim().toLowerCase(); return this.products.filter(p=>{ const okCat=!this.activeCategory||(p.categoria===this.activeCategory); const okQ=!q||[p.nombre,p.descripcion,p.categoria,p.codigo].filter(Boolean).join(' ').toLowerCase().includes(q); return okCat&&okQ; }); },
+    addToCart(item){ const i=this.cart.findIndex(ci=>ci.__id===item.__id); if(i>-1) this.cart[i].cant++; else this.cart.push({...item,cant:1}); localStorage.setItem('cart', JSON.stringify(this.cart)); this.drawer=true; }
   }
 }
 </script>
