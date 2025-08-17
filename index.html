@@ -22,10 +22,6 @@
         <h1 class="text-xl font-bold tracking-tight">eltelepesca</h1>
         <p class="text-xs text-slate-500">Tienda con retiro en local</p>
       </div>
-      <label class="inline-flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-xl" x-show="isAdmin">
-        <input type="file" class="hidden" accept=".xlsx,.xls,.csv" @change="handleFile($event)" />
-        📄 Subir Excel (solo admin)
-      </label>
       <button @click="drawer=true" class="relative bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-xl font-semibold">
         🛒 Carrito
         <span class="absolute -top-2 -right-2 bg-emerald-500 text-white text-xs px-2 py-0.5 rounded-full" x-text="cartCount()"></span>
@@ -83,6 +79,51 @@
     </section>
   </main>
 
+  <!-- Drawer Carrito (esto faltaba) -->
+  <div class="fixed inset-0 z-40" x-show="drawer" x-transition.opacity>
+    <div class="absolute inset-0 bg-black/30" @click="drawer=false"></div>
+    <aside class="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl p-4 overflow-y-auto scrollbar-thin" x-show="drawer" x-transition>
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-lg font-bold">Tu carrito</h3>
+        <button class="text-slate-500" @click="drawer=false">✕</button>
+      </div>
+      <template x-if="cart.length===0">
+        <p class="text-sm text-slate-500">No hay productos en el carrito.</p>
+      </template>
+      <div class="divide-y" x-show="cart.length">
+        <template x-for="(ci,idx) in cart" :key="ci.__id">
+          <div class="py-3 flex gap-3 items-center">
+            <img :src="ci.imagen || 'https://picsum.photos/seed/'+ci.__id+'/100/100'" class="w-16 h-16 rounded-lg object-cover border">
+            <div class="flex-1">
+              <div class="font-medium line-clamp-1" x-text="ci.nombre"></div>
+              <div class="text-sm text-slate-500" x-text="fmtPrice(ci.precio)"></div>
+              <div class="flex items-center gap-2 mt-1">
+                <button class="px-2 border rounded" @click="dec(idx)">-</button>
+                <span x-text="ci.cant"></span>
+                <button class="px-2 border rounded" @click="inc(idx)">+</button>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="font-semibold" x-text="fmtPrice(ci.precio*ci.cant)"></div>
+              <button class="text-xs text-rose-600 mt-1" @click="remove(idx)">Eliminar</button>
+            </div>
+          </div>
+        </template>
+      </div>
+      <div class="mt-4 bg-slate-50 border rounded-2xl p-3" x-show="cart.length">
+        <div class="flex items-center justify-between"><span>Subtotal</span><strong x-text="fmtPrice(total())"></strong></div>
+        <p class="text-xs text-slate-500 mt-1">Solo retiro en local. Te vamos a contactar para coordinar.</p>
+      </div>
+      <div class="mt-4 space-y-2" x-show="cart.length">
+        <input class="w-full border rounded-xl px-3 py-2" placeholder="Tu nombre" x-model="buyer.name">
+        <input class="w-full border rounded-xl px-3 py-2" placeholder="Teléfono / WhatsApp" x-model="buyer.phone">
+      </div>
+      <button class="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-3 rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              :disabled="!canPay" @click="pay()">Pagar con Mercado Pago</button>
+      <p class="text-xs text-slate-500 mt-2">Si el botón aparece deshabilitado, falta configurar el backend (/api/create-preference).</p>
+    </aside>
+  </div>
+
   <!-- Acerca de la tienda -->
   <section class="max-w-6xl mx-auto px-4">
     <div class="bg-white rounded-2xl shadow-sm border p-6">
@@ -119,45 +160,19 @@ function storeApp(){
     return isFinite(n) ? n : 0;
   }
 
-  // Normaliza encabezados (acepta MAYÚSCULAS)
-  function normalizeRow(r){
-    const out = {};
-    for(const k of Object.keys(r)){ out[String(k).toLowerCase()] = r[k]; }
-    return out;
-  }
-  function mapRow(r){
-    const row = normalizeRow(r);
-    const keys = Object.keys(row);
-    const get = (...alts)=>{
-      const found = keys.find(k=>alts.some(a=>k.includes(a)));
-      return found ? row[found] : '';
-    };
-    return {
-      nombre: get('nombre','producto','articulo','descri','detalle','item'),
-      precio: get('precio','$','importe','valor'),
-      descripcion: get('descripcion','detalle','observ'),
-      stock: get('stock','disp'),
-      imagen: get('imagen','foto','url'),
-      codigo: get('codigo','sku','id'),
-      categoria: get('categoria','rubro','familia')
-    };
-  }
-
   return {
     products: [], categories: [], activeCategory: null, query: '', drawer: false, updatedAt: '',
     cart: JSON.parse(localStorage.getItem('cart')||'[]'),
     buyer: JSON.parse(localStorage.getItem('buyer')||'{"name":"","phone":""}'),
-    canPay: false, isAdmin: false, adminKey: 'tele2025',
+    canPay: true, // habilitar botón; tu función lo valida igual
+    isAdmin: false, adminKey: 'tele2025',
+
     init(){
       const p = new URLSearchParams(location.search);
       this.isAdmin = p.get('admin') === this.adminKey;
-      this.syncPayAvailability();
       this.autoLoad();
     },
-    async syncPayAvailability(){
-      try{ const res = await fetch('/api/create-preference', { method:'OPTIONS' }); this.canPay = res.ok; }
-      catch{ this.canPay = false; }
-    },
+
     async autoLoad(){
       try{
         const res = await fetch('/data/productos.xlsx', { cache: 'no-store' });
@@ -169,40 +184,37 @@ function storeApp(){
           const ws = wb.Sheets[sheetName];
           const rows = XLSX.utils.sheet_to_json(ws, { defval:'', raw:true });
           for(const r of rows){
-            const m = mapRow(r);
-            const price = (function(v){ if(typeof v==='number') return v; let s=String(v||'').replace(/[^0-9,.-]/g,''); if(s.includes(',')){ s=s.replace(/\./g,''); s=s.replace(/,/g,'.'); } const n=Number(s); return isFinite(n)?n:NaN; })(m.precio);
-            if(m.nombre && !isNaN(price)){
-              all.push({ __id: sheetName+'-'+(rowId++),
-                nombre: String(m.nombre).trim(), precio: price,
-                descripcion: (m.descripcion||'').toString().trim(),
-                stock: m.stock? parseIntSafe(m.stock): '',
-                imagen: (m.imagen||'').toString().trim(),
-                codigo: (m.codigo||'').toString().trim(),
-                categoria: (m.categoria||sheetName).toString().trim()
-              });
-              cats.add((m.categoria||sheetName).toString().trim());
+            const row = Object.fromEntries(Object.entries(r).map(([k,v])=>[String(k).toLowerCase(), v]));
+            const nombre = row['nombre'] || row['producto'] || row['articulo'] || row['descri'] || row['detalle'] || row['item'];
+            const precio = row['precio'] || row['$'] || row['importe'] || row['valor'];
+            const desc = row['descripcion'] || row['detalle'] || row['observ'];
+            const stock = row['stock'] || row['disp'];
+            const imagen = row['imagen'] || row['foto'] || row['url'];
+            const codigo = row['codigo'] || row['sku'] || row['id'];
+            const categoria = row['categoria'] || row['rubro'] || row['familia'] || sheetName;
+            const pnum = (function(v){ if(typeof v==='number') return v; let s=String(v||'').replace(/[^0-9,.-]/g,''); if(s.includes(',')){ s=s.replace(/\./g,''); s=s.replace(/,/g,'.'); } const n=Number(s); return isFinite(n)?n:NaN; })(precio);
+            if(nombre && !isNaN(pnum)){
+              all.push({ __id: sheetName+'-'+(rowId++), nombre: String(nombre).trim(), precio: pnum,
+                         descripcion: (desc||'').toString().trim(), stock: stock||'', imagen: (imagen||'').toString().trim(),
+                         codigo: (codigo||'').toString().trim(), categoria: String(categoria).trim() });
+              cats.add(String(categoria).trim());
             }
           }
         }
-        this.products = all; this.categories = Array.from(cats);
-        this.updatedAt = dayjs().format('DD/MM/YYYY HH:mm') + ' (archivo del repo)';
-      }catch(e){ /* no-op */ }
+        this.products=all; this.categories=Array.from(cats);
+        this.updatedAt = dayjs().format('DD/MM/YYYY HH:mm');
+      }catch(e){}
     },
+
     fmtPrice(v){ const n=Number(v||0); return n.toLocaleString('es-AR',{style:'currency', currency:'ARS', maximumFractionDigits:0}); },
     cartCount(){ return this.cart.reduce((a,b)=>a+b.cant,0); },
-    filteredProducts(){
-      const q=this.query.trim().toLowerCase();
-      return this.products.filter(p=>{
-        const okCat=!this.activeCategory||(p.categoria===this.activeCategory);
-        const okQ=!q||[p.nombre,p.descripcion,p.categoria,p.codigo].filter(Boolean).join(' ').toLowerCase().includes(q);
-        return okCat&&okQ;
-      });
-    },
-    addToCart(item){ const i=this.cart.findIndex(ci=>ci.__id===item.__id); if(i>-1) this.cart[i].cant++; else this.cart.push({...item,cant:1}); localStorage.setItem('cart', JSON.stringify(this.cart)); this.drawer=true; },
+    total(){ return this.cart.reduce((a,b)=>a + (Number(b.precio)||0)*b.cant, 0); },
+    filteredProducts(){ const q=this.query.trim().toLowerCase(); return this.products.filter(p=>{ const okCat=!this.activeCategory||(p.categoria===this.activeCategory); const okQ=!q||[p.nombre,p.descripcion,p.categoria,p.codigo].filter(Boolean).join(' ').toLowerCase().includes(q); return okCat&&okQ; }); },
+    addToCart(item){ const idx=this.cart.findIndex(ci=>ci.__id===item.__id); if(idx>-1){ this.cart[idx].cant++; } else { this.cart.push({...item,cant:1}); } localStorage.setItem('cart', JSON.stringify(this.cart)); this.drawer=true; },
     inc(i){ this.cart[i].cant++; localStorage.setItem('cart', JSON.stringify(this.cart)); },
     dec(i){ this.cart[i].cant=Math.max(1,this.cart[i].cant-1); localStorage.setItem('cart', JSON.stringify(this.cart)); },
     remove(i){ this.cart.splice(i,1); localStorage.setItem('cart', JSON.stringify(this.cart)); },
-    pay(){ alert('Configurar Mercado Pago en /netlify/functions/create-preference.js y variable MP_ACCESS_TOKEN.'); }
+    pay(){ alert('Para pagos reales, configurá MP_ACCESS_TOKEN y la function /api/create-preference.'); }
   }
 }
 </script>
