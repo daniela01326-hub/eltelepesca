@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Producto — eltelepesca</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/locale/es.js"></script>
+  <script>dayjs.locale('es');</script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-800" x-data="detailApp()" x-init="init()">
+  <header class="sticky top-0 z-30 backdrop-blur bg-white/80 border-b border-slate-200">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
+      <div class="flex-1">
+        <a href="./" class="text-xl font-bold tracking-tight">eltelepesca</a>
+        <p class="text-xs text-slate-500">Tienda con retiro en local</p>
+      </div>
+      <a href="./" class="text-sky-700 underline">← Volver a la tienda</a>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 py-6">
+    <template x-if="!product"><p class="text-sm text-slate-500">Cargando…</p></template>
+    <template x-if="product">
+      <div class="grid md:grid-cols-2 gap-6">
+        <div class="bg-white rounded-2xl shadow-sm border overflow-hidden">
+          <img :src="product.imagen || ('https://picsum.photos/seed/'+product.__id+'/1200/900')" class="w-full h-96 object-cover">
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border p-5 flex flex-col">
+          <h1 class="text-2xl font-bold" x-text="product.nombre"></h1>
+          <p class="text-slate-600 mt-1" x-text="product.codigo ? ('Código: '+product.codigo) : ''"></p>
+          <p class="text-slate-600" x-text="product.stock ? ('Stock: '+product.stock) : ''"></p>
+          <div class="mt-3 space-y-1">
+            <div class="text-2xl font-bold text-emerald-700" x-text="fmtPrice(product.precio_transfer) + ' (Transferencia)'"></div>
+            <div class="text-lg font-semibold text-sky-700" x-text="fmtPrice(product.precio_mp) + ' (Mercado Pago)'"></div>
+          </div>
+          <p class="mt-4 text-slate-700 whitespace-pre-line" x-text="product.descripcion || 'Sin descripción'"></p>
+
+          <div class="mt-auto pt-6 flex gap-2">
+            <button class="flex-1 bg-slate-200 hover:bg-slate-300 rounded-xl px-4 py-2" @click="goBack()">Volver</button>
+            <button class="flex-1 bg-sky-600 hover:bg-sky-700 text-white rounded-xl px-4 py-2 font-semibold" @click="addToCart()">Agregar al carrito</button>
+          </div>
+        </div>
+      </div>
+    </template>
+  </main>
+
+<script>
+function detailApp(){
+  const MP_RATE = 1.10;
+  function num(v){ if (typeof v === 'number') return v; if (v==null) return NaN; let s=String(v).trim().replace(/[^0-9,.-]/g,''); if(s.includes(',')){ s=s.replace(/\./g,''); s=s.replace(/,/g,'.'); } const n=Number(s); return isFinite(n)?n:NaN; }
+  function pick(o,ks){ for(const k of ks){ if(o[k]!=null&&o[k]!=='') return o[k]; } }
+
+  return {
+    product:null, id:null,
+    init(){ const p=new URLSearchParams(location.search); this.id=p.get('id'); this.load(); },
+    async load(){
+      try{
+        const res = await fetch('./data/productos.xlsx', { cache:'no-store' }); if(!res.ok) return;
+        const buf = await res.arrayBuffer(); const wb = XLSX.read(buf,{type:'array'});
+        for(const sheetName of wb.SheetNames){
+          const ws = wb.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});
+          let rowId=1;
+          for(const r of rows){
+            const row=Object.fromEntries(Object.entries(r).map(([k,v])=>[String(k).toLowerCase().trim(), v]));
+            const nombre = pick(row,['nombre','producto','articulo','descri','detalle','item']);
+            const precioRaw = pick(row,['precio','$','importe','valor','p. lista','precio feria','precio unitario']);
+            const desc = pick(row,['descripcion','detalle','observ']);
+            const stock = pick(row,['stock','disp']);
+            const imagen = pick(row,['imagen','foto','url']);
+            const codigo = pick(row,['codigo','sku','id']);
+            const categoria = pick(row,['categoria','rubro','familia']) || sheetName;
+            const base = num(precioRaw);
+            if(nombre && !isNaN(base)){
+              const rec = { __id: sheetName+'-'+(rowId++), nombre: String(nombre).trim(),
+                precio_transfer: Math.round(base), precio_mp: Math.round(base*MP_RATE),
+                descripcion: String(desc||'').trim(), stock: stock||'',
+                imagen: String(imagen||'').trim(), codigo: String(codigo||'').trim(),
+                categoria: String(categoria).trim() };
+              if (rec.__id === this.id){ this.product = rec; return; }
+            }
+          }
+        }
+      }catch(e){}
+    },
+    fmtPrice(v){ return Number(v||0).toLocaleString('es-AR',{style:'currency', currency:'ARS', maximumFractionDigits:0}); },
+    addToCart(){
+      const item = this.product; if(!item) return;
+      const cart = JSON.parse(localStorage.getItem('cart')||'[]');
+      const idx = cart.findIndex(ci=>ci.__id===item.__id);
+      if (idx>-1){ cart[idx].cant = (cart[idx].cant||0)+1; } else { cart.push({...item, cant:1}); }
+      localStorage.setItem('cart', JSON.stringify(cart));
+      alert('Agregado al carrito');
+    },
+    goBack(){ history.length > 1 ? history.back() : location.href = './'; }
+  }
+}
+</script>
+</body>
+</html>
