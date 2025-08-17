@@ -22,6 +22,9 @@
         <h1 class="text-xl font-bold tracking-tight">eltelepesca</h1>
         <p class="text-xs text-slate-500">Tienda con retiro en local</p>
       </div>
+      <label class="inline-flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-xl" x-show="isAdmin">
+        <input type="file" class="hidden" accept=".xlsx,.xls,.csv" @change="handleFile($event)" />📄 Subir Excel (solo admin)
+      </label>
       <button @click="drawer=true" class="relative bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-xl font-semibold">
         🛒 Carrito
         <span class="absolute -top-2 -right-2 bg-emerald-500 text-white text-xs px-2 py-0.5 rounded-full" x-text="cartCount()"></span>
@@ -40,8 +43,7 @@
           </template>
         </div>
         <template x-if="!categories.length"><p class="text-sm text-slate-500">Cargando catálogo…</p></template>
-        <hr class="my-4">
-        <h2 class="font-semibold mb-2">Búsqueda</h2>
+        <hr class="my-4"><h2 class="font-semibold mb-2">Búsqueda</h2>
         <input type="search" class="w-full border rounded-2xl px-3 py-2" placeholder="Buscar producto..." x-model="query">
       </div>
       <div class="mt-6 bg-amber-50 border-amber-200 text-amber-800 border rounded-2xl p-4">
@@ -79,7 +81,7 @@
     </section>
   </main>
 
-  <!-- Drawer Carrito (esto faltaba) -->
+  <!-- Drawer Carrito -->
   <div class="fixed inset-0 z-40" x-show="drawer" x-transition.opacity>
     <div class="absolute inset-0 bg-black/30" @click="drawer=false"></div>
     <aside class="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl p-4 overflow-y-auto scrollbar-thin" x-show="drawer" x-transition>
@@ -110,17 +112,24 @@
           </div>
         </template>
       </div>
+
       <div class="mt-4 bg-slate-50 border rounded-2xl p-3" x-show="cart.length">
         <div class="flex items-center justify-between"><span>Subtotal</span><strong x-text="fmtPrice(total())"></strong></div>
-        <p class="text-xs text-slate-500 mt-1">Solo retiro en local. Te vamos a contactar para coordinar.</p>
+        <p class="text-xs text-slate-500 mt-1">Pago por transferencia. Luego enviá el comprobante por WhatsApp.</p>
       </div>
+
       <div class="mt-4 space-y-2" x-show="cart.length">
         <input class="w-full border rounded-xl px-3 py-2" placeholder="Tu nombre" x-model="buyer.name">
         <input class="w-full border rounded-xl px-3 py-2" placeholder="Teléfono / WhatsApp" x-model="buyer.phone">
       </div>
-      <button class="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-3 rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-              :disabled="!canPay" @click="pay()">Pagar con Mercado Pago</button>
-      <p class="text-xs text-slate-500 mt-2">Si el botón aparece deshabilitado, falta configurar el backend (/api/create-preference).</p>
+
+      <div class="mt-4 bg-emerald-50 border border-emerald-200 rounded-2xl p-3 space-y-2" x-show="cart.length">
+        <div class="text-sm"><strong>Alias para transferir:</strong> <span class="font-mono">eltele2</span></div>
+        <div class="flex gap-2">
+          <button class="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold" @click="copyAlias()">Copiar alias</button>
+          <button class="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-semibold" @click="sendWhatsApp()">Enviar pedido por WhatsApp</button>
+        </div>
+      </div>
     </aside>
   </div>
 
@@ -146,6 +155,7 @@
 
 <script>
 function storeApp(){
+  const ALIAS = "eltele2";
   function parseMoney(v){
     if (typeof v === 'number') return v;
     if (v == null) return NaN;
@@ -164,7 +174,6 @@ function storeApp(){
     products: [], categories: [], activeCategory: null, query: '', drawer: false, updatedAt: '',
     cart: JSON.parse(localStorage.getItem('cart')||'[]'),
     buyer: JSON.parse(localStorage.getItem('buyer')||'{"name":"","phone":""}'),
-    canPay: true, // habilitar botón; tu función lo valida igual
     isAdmin: false, adminKey: 'tele2025',
 
     init(){
@@ -214,7 +223,27 @@ function storeApp(){
     inc(i){ this.cart[i].cant++; localStorage.setItem('cart', JSON.stringify(this.cart)); },
     dec(i){ this.cart[i].cant=Math.max(1,this.cart[i].cant-1); localStorage.setItem('cart', JSON.stringify(this.cart)); },
     remove(i){ this.cart.splice(i,1); localStorage.setItem('cart', JSON.stringify(this.cart)); },
-    pay(){ alert('Para pagos reales, configurá MP_ACCESS_TOKEN y la function /api/create-preference.'); }
+
+    copyAlias(){ navigator.clipboard.writeText(ALIAS).then(()=>alert('Alias copiado: '+ALIAS)); },
+
+    sendWhatsApp(){
+      const items = this.cart.map(ci => `• ${'{'}${'i'}${'}'}`).join(''); // placeholder no usado
+      const lines = this.cart.map(ci => `• ${ci.cant} x ${ci.nombre} — $ ${(ci.precio*ci.cant).toLocaleString('es-AR')}`);
+      const total = this.total().toLocaleString('es-AR');
+      const parts = [
+        'Hola, quiero confirmar mi pedido:',
+        ...lines,
+        '',
+        'Total: $ ' + total,
+        'Pago por transferencia al alias: ' + ALIAS,
+        'Nombre: ' + (this.buyer.name||''),
+        'Teléfono: ' + (this.buyer.phone||'')
+      ];
+      const msg = encodeURIComponent(parts.join('\n'));
+      const phone = '541165780247'; // cambiar si querés otro número
+      const url = 'https://wa.me/' + phone + '?text=' + msg;
+      window.open(url, '_blank');
+    }
   }
 }
 </script>
