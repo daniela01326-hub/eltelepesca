@@ -10,10 +10,7 @@
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/locale/es.js"></script>
   <script>dayjs.locale('es');</script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    .line-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-    .scrollbar-thin{scrollbar-width:thin} .scrollbar-thin::-webkit-scrollbar{height:8px;width:8px}
-  </style>
+  <style>.line-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.scrollbar-thin{scrollbar-width:thin}.scrollbar-thin::-webkit-scrollbar{height:8px;width:8px}</style>
 </head>
 <body class="bg-slate-50 text-slate-800" x-data="storeApp()" x-init="init()">
   <header class="sticky top-0 z-30 backdrop-blur bg-white/80 border-b border-slate-200">
@@ -40,8 +37,7 @@
           </template>
         </div>
         <template x-if="!categories.length"><p class="text-sm text-slate-500">Cargando catálogo…</p></template>
-        <hr class="my-4">
-        <h2 class="font-semibold mb-2">Búsqueda</h2>
+        <hr class="my-4"><h2 class="font-semibold mb-2">Búsqueda</h2>
         <input type="search" class="w-full border rounded-2xl px-3 py-2" placeholder="Buscar producto..." x-model="query">
       </div>
       <div class="mt-6 bg-amber-50 border-amber-200 text-amber-800 border rounded-2xl p-4">
@@ -89,11 +85,7 @@
         <h3 class="text-lg font-bold">Tu carrito</h3>
         <button class="text-slate-500" @click="drawer=false">✕</button>
       </div>
-
-      <template x-if="cart.length===0">
-        <p class="text-sm text-slate-500">No hay productos en el carrito.</p>
-      </template>
-
+      <template x-if="cart.length===0"><p class="text-sm text-slate-500">No hay productos en el carrito.</p></template>
       <div class="divide-y" x-show="cart.length">
         <template x-for="(ci,idx) in cart" :key="ci.__id">
           <div class="py-3 flex gap-3 items-center">
@@ -120,7 +112,6 @@
           </div>
         </template>
       </div>
-
       <div class="mt-4 grid grid-cols-2 gap-3" x-show="cart.length">
         <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3">
           <div class="text-xs text-slate-600">Total Transferencia</div>
@@ -134,7 +125,6 @@
           <button class="mt-2 w-full px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-semibold" @click="payMP()">Pagar con MP</button>
         </div>
       </div>
-
       <div class="mt-4 space-y-2" x-show="cart.length">
         <input class="w-full border rounded-xl px-3 py-2" placeholder="Tu nombre" x-model="buyer.name">
         <input class="w-full border rounded-xl px-3 py-2" placeholder="Teléfono / WhatsApp" x-model="buyer.phone">
@@ -142,18 +132,14 @@
     </aside>
   </div>
 
-  <!-- Acerca de la tienda -->
   <section class="max-w-6xl mx-auto px-4">
     <div class="bg-white rounded-2xl shadow-sm border p-6">
       <h2 class="text-xl font-semibold">Acerca de la tienda</h2>
       <p class="mt-3 text-slate-700 leading-relaxed">
-        Casa de pesca con una trayectoria de 45 años, nos pueden encontrar los domingos en la Feria del Parque los derechos del Trabajador - Villa Domínico Partido de Avellaneda, en la calle Darwin y Emilizo Zola desde las 8 a las 15 hs, frente a las vías del tren.
+        Casa de pesca con una trayectoria de 45 años...
       </p>
       <p class="mt-3 text-slate-700 leading-relaxed">
-        Nuestra misión es cumplir con las expectativas del cliente, y que puedan elegir entre la gran variedad y surtido de artículos con los mejores precios. Asesoramiento personalizado y atención de primer nivel.
-      </p>
-      <p class="mt-3 text-slate-700 leading-relaxed">
-        📍 Ubicación: <a href="https://www.google.com/maps/place/el+tele+ivanstg/@-34.6899038,-58.3303484,17z/data=!3m1!4b1!4m6!3m5!1s0x95a333cd433e0c45:0x69a1b7ec7d441d82!8m2!3d-34.6899038!4d-58.3277735!16s%2Fg%2F11jwj0zj8n?entry=ttu&g_ep=EgoyMDI1MDgxMy4wIKXMDSoASAFQAw%3D%3D" target="_blank" class="underline">Emilio Zola & Darwin, Villa Domínico, Provincia de Buenos Aires, Argentina</a>
+        📍 Ubicación: <a href="https://www.google.com/maps/place/el+tele+ivanstg/@-34.6899038,-58.3303484,17z" target="_blank" class="underline">Emilio Zola & Darwin, Villa Domínico, Provincia de Buenos Aires, Argentina</a>
       </p>
     </div>
   </section>
@@ -164,9 +150,9 @@
 
 <script>
 function storeApp(){
-  const MP_RATE = 1.10; // +10% para MP (ajustable)
+  const MP_RATE = 1.10;
   const WHATSAPP_TO = '541165780247';
-  function parseMoney(v){
+  function num(v){
     if (typeof v === 'number') return v;
     if (v == null) return NaN;
     let s = String(v).trim();
@@ -174,6 +160,10 @@ function storeApp(){
     if (s.includes(',')) { s = s.replace(/\./g, ''); s = s.replace(/,/g, '.'); }
     const n = Number(s);
     return isFinite(n) ? n : NaN;
+  }
+  function pick(obj, keys){
+    for (const k of keys){ if (obj[k] != null && obj[k] !== '') return obj[k]; }
+    return undefined;
   }
 
   return {
@@ -190,7 +180,7 @@ function storeApp(){
     async autoLoad(){
       try{
         const res = await fetch('/data/productos.xlsx', { cache: 'no-store' });
-        if(!res.ok) return;
+        if(!res.ok){ console.warn('No se pudo cargar productos.xlsx', res.status); return; }
         const buf = await res.arrayBuffer();
         const wb = XLSX.read(buf, { type:'array' });
         const all = []; const cats = new Set(); let rowId=1;
@@ -198,30 +188,32 @@ function storeApp(){
           const ws = wb.Sheets[sheetName];
           const rows = XLSX.utils.sheet_to_json(ws, { defval:'', raw:true });
           for(const r of rows){
-            const row = Object.fromEntries(Object.entries(r).map(([k,v])=>[String(k).toLowerCase(), v]));
-            const nombre = row['nombre'] || row['producto'] || row['articulo'] || row['descri'] || row['detalle'] || row['item'];
-            const precio = row['precio'] || row['$'] || row['importe'] || row['valor'];
-            const desc = row['descripcion'] || row['detalle'] || row['observ'];
-            const stock = row['stock'] || row['disp'];
-            const imagen = row['imagen'] || row['foto'] || row['url'];
-            const codigo = row['codigo'] || row['sku'] || row['id'];
-            const categoria = row['categoria'] || row['rubro'] || row['familia'] || sheetName;
-            const base = (function(v){ if(typeof v==='number') return v; let s=String(v||'').replace(/[^0-9,.-]/g,''); if(s.includes(',')){ s=s.replace(/\./g,''); s=s.replace(/,/g,'.'); } const n=Number(s); return isFinite(n)?n:NaN; })(precio);
+            const row = Object.fromEntries(Object.entries(r).map(([k,v])=>[String(k).toLowerCase().trim(), v]));
+            const nombre = pick(row, ['nombre','producto','articulo','descri','detalle','item']);
+            const precioRaw = pick(row, ['precio','$','importe','valor','p. lista','precio feria','precio unitario']);
+            const desc = pick(row, ['descripcion','detalle','observ']);
+            const stock = pick(row, ['stock','disp']);
+            const imagen = pick(row, ['imagen','foto','url']);
+            const codigo = pick(row, ['codigo','sku','id']);
+            const categoria = pick(row, ['categoria','rubro','familia']) || sheetName;
+            const base = num(precioRaw);
             if(nombre && !isNaN(base)){
               const precio_transfer = Math.round(base);
               const precio_mp = Math.round(base * MP_RATE);
               all.push({ __id: sheetName+'-'+(rowId++), nombre: String(nombre).trim(),
-                precio_transfer, precio_mp,
-                descripcion: (desc||'').toString().trim(), stock: stock||'',
-                imagen: (imagen||'').toString().trim(), codigo: (codigo||'').toString().trim(),
+                precio_transfer, precio_mp, descripcion: String(desc||'').trim(), stock: stock||'',
+                imagen: String(imagen||'').trim(), codigo: String(codigo||'').trim(),
                 categoria: String(categoria).trim(), cant: 0 });
               cats.add(String(categoria).trim());
+            } else if (nombre && (precioRaw===undefined || precioRaw==="")) {
+              console.warn('Fila sin precio en hoja', sheetName, '->', r);
             }
           }
         }
         this.products=all; this.categories=Array.from(cats);
         this.updatedAt = dayjs().format('DD/MM/YYYY HH:mm');
-      }catch(e){}
+        if (!all.length) console.warn('No se generaron productos. Verificá encabezados: NOMBRE, PRECIO, DESCRIPCION, STOCK, IMAGEN, CODIGO.');
+      }catch(e){ console.error('Error leyendo Excel', e); }
     },
 
     fmtPrice(v){ const n=Number(v||0); return n.toLocaleString('es-AR',{style:'currency', currency:'ARS', maximumFractionDigits:0}); },
@@ -240,23 +232,17 @@ function storeApp(){
       const totalM = this.totalMP().toLocaleString('es-AR');
       const texto = encodeURIComponent([
         'Hola, quiero confirmar mi pedido:',
-        lines,
-        '',
+        lines,'',
         'Total Transferencia: $ ' + totalT,
         'Total Mercado Pago: $ ' + totalM,
         'Método elegido: ' + (metodo === 'transfer' ? 'Transferencia (alias eltele2)' : 'Mercado Pago'),
         'Nombre: ' + (this.buyer.name||''),
         'Teléfono: ' + (this.buyer.phone||'')
       ].join('\n'));
-      const url = 'https://wa.me/541165780247?text=' + texto;
-      window.open(url, '_blank');
+      window.open('https://wa.me/541165780247?text=' + texto, '_blank');
     },
 
     async payMP(){
-      if(!this.canPay){
-        alert('Para pagos por Mercado Pago, configurá MP_ACCESS_TOKEN y la función /api/create-preference.');
-        return;
-      }
       const items = this.cart.map(ci => ({ title: ci.nombre, quantity: ci.cant, unit_price: ci.precio_mp }));
       try{
         const r = await fetch('/api/create-preference', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ items }) });
